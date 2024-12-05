@@ -3,6 +3,7 @@ import json
 from typing import Optional, List
 from model import CDNResource
 from pydantic import ValidationError
+import logging
 
 #TODO: use pydantic
 class CDNResourcesProcessor:
@@ -58,12 +59,17 @@ class CDNResourcesProcessor:
         try:
             return CDNResource.model_validate(request.json())
         except json.JSONDecodeError as e:
-            ...  # log
+            logging.error(f'cdn resource [{cdn_id}] json decode error')
+            logging.debug(f'error details: {e}')
         except ValidationError as e:
-            print(1)
-            ...  # log
+            logging.error(f'cdn resource [{cdn_id}] validation error')
+            logging.debug(f'error details: {e}')
         except Exception as e:
-            ...  # log
+            logging.error(f'unknown error')
+            logging.debug(f'error details: {e}')
+        finally:
+            logging.debug(f'response text: {request.text}')
+
 
     def create_cdn_resource(self) -> None:
         ...

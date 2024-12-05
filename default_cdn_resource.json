@@ -1,0 +1,76 @@
+{
+    "active": true,
+    "options": {
+        "edgeCacheSettings": {
+            "enabled": true,
+            "defaultValue": "86400"
+        },
+        "browserCacheSettings": {
+            "enabled": false
+        },
+        "queryParamsOptions": {
+            "ignoreQueryString": {
+                "enabled": true,
+                "value": true
+            }
+        },
+        "slice": {
+            "enabled": false,
+            "value": false
+        },
+        "compressionOptions": {
+            "gzipOn": {
+                "enabled": true,
+                "value": true
+            }
+        },
+        "staticHeaders": {
+            "enabled": true
+        },
+        "stale": {
+            "enabled": false
+        },
+        "allowedHttpMethods": {
+            "enabled": true,
+            "value": [
+                "GET",
+                "HEAD",
+                "OPTIONS"
+            ]
+        },
+        "proxyCacheMethodsSet": {
+            "enabled": true,
+            "value": false
+        },
+        "disableProxyForceRanges": {
+            "enabled": true,
+            "value": true
+        },
+        "staticRequestHeaders": {
+            "enabled": true
+        },
+        "customServerName": {
+            "enabled": false
+        },
+        "ignoreCookie": {
+            "enabled": true,
+            "value": true
+        },
+        "secureKey": {
+            "enabled": false,
+            "type": "DISABLE_IP_SIGNING"
+        }
+    },
+    "sslCertificate": {
+        "type": "DONT_USE",
+        "status": "READY"
+    },
+    "id": "cdnrosyqyc5qw5d3fwjw",
+    "folderId": "b1gp3pi4u3qgg32j06p1",
+    "cname": "cdn.marmota-bobak.ru",
+    "createdAt": "2024-12-04T17:09:30.759061Z",
+    "updatedAt": "2024-12-04T17:09:30.761877Z",
+    "originGroupId": "6053315896289135411",
+    "originGroupName": "common-marmota-bobak-ru",
+    "originProtocol": "HTTP"
+}
