@@ -1,6 +1,8 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Union, List
 from datetime import datetime
+from typing import Optional, List
+
+from pydantic import BaseModel, Field
+
 
 class BaseModelWithAliases(BaseModel):
     class Config:

@@ -1,13 +1,15 @@
+import json
+import logging
 import time
+from functools import wraps
+from typing import Optional, List, Callable, Any
 
 import requests
-import json
-from typing import Optional, List, Callable, Any
-from model import CDNResource
-from pydantic import ValidationError
-import logging
 from pydantic import BaseModel
-from functools import wraps
+from pydantic import ValidationError
+
+from model import CDNResource
+
 
 def repeat_and_sleep(times_to_repeat: int = 3, sleep_duration: int = 1):
     def decorator(func: Callable):
@@ -16,20 +18,17 @@ def repeat_and_sleep(times_to_repeat: int = 3, sleep_duration: int = 1):
             logging.info(f'Processing function [{func}] for [{times_to_repeat}] '
                          f'times with [{sleep_duration}] second(s) sleep...')
             for i in range(times_to_repeat):
-                logging.info(f'Attempt #{i}...')
+                logging.info(f'Attempt #{i+1}...')
                 res = func(*args, **kwargs)
                 if res is not None:
-                    break
+                    return res
                 logging.info(f'...failed. Sleeping for {sleep_duration} second(s)...')
                 time.sleep(sleep_duration)
             else:
                 logging.error(f'failed to successfully complete func [{func}]')
                 return None
-            logging.info('Successfully completed!')
         return wrapper
     return decorator
-
-
 
 class CDNResourceProcessorResponseError(BaseModel):
     code: int
@@ -96,11 +95,11 @@ class CDNResourcesProcessor:
         try:
             return CDNResource.model_validate(request.json())
         except json.JSONDecodeError as e:
-            logging.error(f'cdn resource [{cdn_id}] json decode error')
+            logging.error(f'json decode error')
             logging.debug(f'error details: {e}')
             return None
         except ValidationError as e:
-            logging.error(f'cdn resource [{cdn_id}] validation error')
+            logging.error(f'pydantic validation error')
             logging.debug(f'error details: {e}')
             return None
         except Exception as e:
@@ -110,7 +109,7 @@ class CDNResourcesProcessor:
         finally:
             logging.debug(f'response text: {request.text}')
 
-    @repeat_and_sleep(3, 1)
+    @repeat_and_sleep(times_to_repeat=3, sleep_duration=1)
     def create_cdn_resource(self, cdn_resource: CDNResource) -> Optional[str]:
         url = f'{self.api_url}/resources/'
         headers = {'Authorization': f'Bearer {self.token}'}
@@ -144,7 +143,7 @@ class CDNResourcesProcessor:
                     return None
 
                 if 'metadata' in response_dict and (cdn_resource_id := response_dict['metadata'].get('resourceId')):
-                    logging.info(f'cdn resource [{cdn_resource_id}] created successfully')
+                    logging.info(f'CDN Resource [{cdn_resource_id}] created successfully')
                     logging.debug(response_dict)
                     return cdn_resource_id
 

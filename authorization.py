@@ -1,6 +1,8 @@
-import requests
 import json
 from typing import Optional
+
+import requests
+
 
 #TODO: use pydantic
 class Authorization:

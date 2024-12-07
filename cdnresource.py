@@ -1,4 +1,5 @@
-from model import CDNResource, CDNResourceOptions, SSLCertificate, EnabledBoolValueBool, EdgeCacheSettings, EnabledBool
+from model import CDNResource, SSLCertificate
+
 
 def make_cdn_resource_ssl_certificate_attribute(ssl_type: str = None) -> SSLCertificate:
     #TODO: make different types

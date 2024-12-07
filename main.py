@@ -1,11 +1,9 @@
+import logging
 import os
-import time
 
 from authorization import Authorization
-from cdnresourcesapiprocessor import CDNResourcesProcessor
 from cdnresource import make_default_cdn_resource
-from model import CDNResource
-import logging
+from cdnresourcesapiprocessor import CDNResourcesProcessor
 
 #TODO: get logging level from cli args
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
@@ -27,9 +25,6 @@ def main():
 
     cdn_resources_processor = CDNResourcesProcessor(api_url=API_URL, folder_id=FOLDER_ID, token=token)
     cdn_resources_processor.delete_all_cdn_resources()
-
-    # cdn_resources_ids = cdn_resources_processor.get_cdn_resources_ids()
-    # cdn_resource = cdn_resources_processor.get_cdn_resource(cdn_resources_ids[0])
 
     #DEBUG
     default_cname='cdn1123.marmota-bobak.ru'
