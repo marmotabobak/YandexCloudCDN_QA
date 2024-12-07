@@ -2,6 +2,10 @@ from pydantic import BaseModel, Field
 from typing import Optional, Union, List
 from datetime import datetime
 
+class BaseModelWithAliases(BaseModel):
+    class Config:
+        populate_by_name = True
+
 class EnabledBool(BaseModel):
     enabled: bool
 
@@ -57,7 +61,7 @@ class SSLCertificate(BaseModel):
     type: str
     status: str
 
-class CDNResourceOptions(BaseModel):
+class CDNResourceOptions(BaseModelWithAliases):
     edge_cache_settings: EdgeCacheSettings = Field(..., alias='edgeCacheSettings')
     browser_cache_settings: EnabledBool = Field(..., alias='browserCacheSettings')
     query_params_options: Optional[QueryParamsOptions] = Field(None, alias='queryParamsOptions')
@@ -78,9 +82,9 @@ class CDNResourceOptions(BaseModel):
     secure_key: SecureKey = Field(..., alias='secureKey')
     ip_address_acl: Optional[IpAddressAcl] = Field(None, alias='ipAddressAcl')
 
-class CDNResource(BaseModel):
-    active: bool
-    options: CDNResourceOptions
+class CDNResource(BaseModelWithAliases):
+    active: Optional[bool] = Field(None)
+    options: Optional[CDNResourceOptions] = Field(None)
     secondary_hostnames: Optional[List[str]] = Field(None, alias='secondaryHostnames')
     ssl_certificate: Optional[SSLCertificate] = Field(None, alias='sslCertificate')
     id: Optional[str] = Field(None)

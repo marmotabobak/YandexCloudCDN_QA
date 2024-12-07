@@ -1,11 +1,12 @@
 import os
 from authorization import Authorization
 from cdnresourcesapiprocessor import CDNResourcesProcessor
+from cdnreource import make_default_cdn_resource
 from model import CDNResource
 import logging
 
 #TODO: get logging level from cli args
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
 logging.info('Starting service')
 
 OAUTH = os.environ['OAUTH']  #TODO: get from cli args
@@ -26,7 +27,6 @@ def main():
     # cdn_resources_processor.delete_all_cdn_resources()
     cdn_resources_ids = cdn_resources_processor.get_cdn_resources_ids()
     cdn_resource = cdn_resources_processor.get_cdn_resource(cdn_resources_ids[0])
-    print(cdn_resource)
 
 if __name__ == '__main__':
     main()
