@@ -1,6 +1,6 @@
 import os
 from authorization import Authorization
-from cdnresourcesprocessor import CDNResourcesProcessor
+from cdnresourcesapiprocessor import CDNResourcesProcessor
 from model import CDNResource
 import logging
 

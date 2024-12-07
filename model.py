@@ -27,7 +27,8 @@ class Host(BaseModel):
     value: str
 
 class HostOptions(BaseModel):
-    host: Host
+    host: Optional[Host] = Field(None)
+    forward_host_header: Optional[EnabledBoolValueBool] = Field(None, alias='forwardHostHeader')
 
 class Cors(BaseModel):
     enabled: bool
@@ -44,7 +45,7 @@ class Rewrite(BaseModel):
 
 class SecureKey(BaseModel):
     enabled: bool
-    key: Optional[str]
+    key: Optional[str] = Field(None)
     type: str
 
 class IpAddressAcl(BaseModel):
@@ -56,7 +57,7 @@ class SSLCertificate(BaseModel):
     type: str
     status: str
 
-class Options(BaseModel):
+class CDNResourceOptions(BaseModel):
     edge_cache_settings: EdgeCacheSettings = Field(..., alias='edgeCacheSettings')
     browser_cache_settings: EnabledBool = Field(..., alias='browserCacheSettings')
     query_params_options: Optional[QueryParamsOptions] = Field(None, alias='queryParamsOptions')
@@ -65,7 +66,7 @@ class Options(BaseModel):
     redirect_options: Optional[RedirectOptions] = Field(None, alias='redirectOptions')
     host_options: Optional[HostOptions] = Field(None, alias='hostOptions')
     static_headers: EnabledBool = Field(..., alias='staticHeaders')
-    cors: Optional[Cors]
+    cors: Optional[Cors] = Field(None)
     stale: EnabledBool
     allowed_http_methods: AllowedHttpMethods = Field(..., alias='allowedHttpMethods')
     proxy_cache_methods_set: EnabledBoolValueBool = Field(..., alias='proxyCacheMethodsSet')
@@ -73,21 +74,21 @@ class Options(BaseModel):
     static_request_headers: EnabledBool = Field(..., alias='staticRequestHeaders')
     custom_server_name: EnabledBool = Field(..., alias='customServerName')
     ignore_cookie: EnabledBoolValueBool = Field(..., alias='ignoreCookie')
-    rewrite: Optional[Rewrite]
+    rewrite: Optional[Rewrite] = Field(None)
     secure_key: SecureKey = Field(..., alias='secureKey')
     ip_address_acl: Optional[IpAddressAcl] = Field(None, alias='ipAddressAcl')
 
 class CDNResource(BaseModel):
     active: bool
-    options: Options
-    secondary_hostnames: Optional[List[str]] = Field(..., alias='secondaryHostnames')
-    ssl_certificate: SSLCertificate = Field(..., alias='sslCertificate')
-    id: str
+    options: CDNResourceOptions
+    secondary_hostnames: Optional[List[str]] = Field(None, alias='secondaryHostnames')
+    ssl_certificate: Optional[SSLCertificate] = Field(None, alias='sslCertificate')
+    id: Optional[str] = Field(None)
     folder_id: str = Field(..., alias='folderId')
     cname: str
-    created_at: datetime = Field(..., alias='createdAt')
-    updated_at: datetime = Field(..., alias='updatedAt')
+    created_at: Optional[datetime] = Field(None, alias='createdAt')
+    updated_at: Optional[datetime] = Field(None, alias='updatedAt')
     origin_group_id: str = Field(..., alias='originGroupId')
-    origin_group_name: str = Field(..., alias='originGroupName')
+    origin_group_name: Optional[str] = Field(None, alias='originGroupName')
     origin_protocol: str = Field(..., alias='originProtocol')
 
