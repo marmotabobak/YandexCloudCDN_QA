@@ -1,9 +1,39 @@
+import time
+
 import requests
 import json
-from typing import Optional, List
+from typing import Optional, List, Callable, Any
 from model import CDNResource
 from pydantic import ValidationError
 import logging
+from pydantic import BaseModel
+from functools import wraps
+
+def repeat_and_sleep(times_to_repeat: int = 3, sleep_duration: int = 1):
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any):
+            logging.info(f'Processing function [{func}] for [{times_to_repeat}] '
+                         f'times with [{sleep_duration}] second(s) sleep...')
+            for i in range(times_to_repeat):
+                logging.info(f'Attempt #{i}...')
+                res = func(*args, **kwargs)
+                if res is not None:
+                    break
+                logging.info(f'...failed. Sleeping for {sleep_duration} second(s)...')
+                time.sleep(sleep_duration)
+            else:
+                logging.error(f'failed to successfully complete func [{func}]')
+                return None
+            logging.info('Successfully completed!')
+        return wrapper
+    return decorator
+
+
+
+class CDNResourceProcessorResponseError(BaseModel):
+    code: int
+    message: str
 
 #TODO: use pydantic
 class CDNResourcesProcessor:
@@ -30,10 +60,13 @@ class CDNResourcesProcessor:
                 return None
         except json.JSONDecodeError as e:
             ...  # log
+            return None
         except KeyError as e:
             ...  # log
+            return None
         except Exception as e:
             ...  # log
+            return None
 
     def delete_cdn_resource(self, cdn_id: str) -> None:
         url = f'{self.api_url}/resources/{cdn_id}'
@@ -43,6 +76,8 @@ class CDNResourcesProcessor:
         if request.status_code != 200:
             ...  # log
 
+        logging.info(f'CDN Resource [{cdn_id}] deleted successfully')
+
     def delete_cdn_resources(self, ids: List[str]) -> None:
         for cdn_id in ids:
             self.delete_cdn_resource(cdn_id)
@@ -51,8 +86,10 @@ class CDNResourcesProcessor:
         if (cdn_resources_list := self.get_cdn_resources_ids()) is not None:
             for cdn_id in cdn_resources_list:
                 self.delete_cdn_resource(cdn_id=cdn_id)
+        else:
+            logging.info('Trying to delete all CDN Resources... none found to delete')
 
-    def get_cdn_resource(self, cdn_id: str) -> CDNResource:
+    def get_cdn_resource(self, cdn_id: str) -> Optional[CDNResource]:
         url = f'{self.api_url}/resources/{cdn_id}'
         headers = {'Authorization': f'Bearer {self.token}'}
         request = requests.get(url=url, headers=headers)
@@ -61,15 +98,69 @@ class CDNResourcesProcessor:
         except json.JSONDecodeError as e:
             logging.error(f'cdn resource [{cdn_id}] json decode error')
             logging.debug(f'error details: {e}')
+            return None
         except ValidationError as e:
             logging.error(f'cdn resource [{cdn_id}] validation error')
             logging.debug(f'error details: {e}')
+            return None
         except Exception as e:
             logging.error(f'unknown error')
             logging.debug(f'error details: {e}')
+            return None
         finally:
             logging.debug(f'response text: {request.text}')
 
+    @repeat_and_sleep(3, 1)
+    def create_cdn_resource(self, cdn_resource: CDNResource) -> Optional[str]:
+        url = f'{self.api_url}/resources/'
+        headers = {'Authorization': f'Bearer {self.token}'}
+        payload = {
+            'folderId': cdn_resource.folder_id,
+            'cname': cdn_resource.cname,
+            'origin': {
+                'originGroupId': cdn_resource.origin_group_id
+            },
+            'originProtocol': cdn_resource.origin_protocol
+        }
 
-    def create_cdn_resource(self) -> None:
-        ...
+        request = requests.post(url=url, headers=headers, json=payload)
+
+        response_status = request.status_code
+        if response_status == 200:
+            try:
+                response_dict = request.json()
+
+                if error := response_dict.get('error'):
+                    try:
+                        error = CDNResourceProcessorResponseError.model_validate(error)
+                    except ValidationError as e:
+                        logging.error('pydantic validation error')
+                        logging.debug(f'error details: {e}')
+                    except Exception as e:
+                        logging.debug('unknown error')
+                        logging.debug(f'error details: {e}')
+
+                    logging.error(f'API error: {error.message}, code {error.code}')
+                    return None
+
+                if 'metadata' in response_dict and (cdn_resource_id := response_dict['metadata'].get('resourceId')):
+                    logging.info(f'cdn resource [{cdn_resource_id}] created successfully')
+                    logging.debug(response_dict)
+                    return cdn_resource_id
+
+            except json.JSONDecodeError as e:
+                ...  # log
+                return None
+            except KeyError as e:
+                ...  # log
+                return None
+            except Exception as e:
+                ...  # log
+                return None
+            finally:
+                logging.debug(f'response text: {request.text}')
+        elif response_status == 400:
+            logging.error('bad request')
+            logging.debug(request.text)
+            return None
+

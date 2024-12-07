@@ -6,58 +6,58 @@ class BaseModelWithAliases(BaseModel):
     class Config:
         populate_by_name = True
 
-class EnabledBool(BaseModel):
+class EnabledBool(BaseModelWithAliases):
     enabled: bool
 
-class EnabledBoolValueBool(BaseModel):
+class EnabledBoolValueBool(BaseModelWithAliases):
     enabled: bool
     value: bool
 
-class EdgeCacheSettings(BaseModel):
+class EdgeCacheSettings(BaseModelWithAliases):
     enabled: bool
     default_value: str = Field(..., alias='defaultValue')
 
-class QueryParamsOptions(BaseModel):
+class QueryParamsOptions(BaseModelWithAliases):
     ignore_query_string: EnabledBoolValueBool = Field(..., alias='ignoreQueryString')
 
-class CompressionOptions(BaseModel):
+class CompressionOptions(BaseModelWithAliases):
     gzip_on: EnabledBoolValueBool = Field(..., alias='gzipOn')
 
-class RedirectOptions(BaseModel):
+class RedirectOptions(BaseModelWithAliases):
     redirect_http_to_https: Optional[EnabledBoolValueBool] = Field(alias='redirectHttpToHttps')
 
-class Host(BaseModel):
+class Host(BaseModelWithAliases):
     enabled: bool
     value: str
 
-class HostOptions(BaseModel):
+class HostOptions(BaseModelWithAliases):
     host: Optional[Host] = Field(None)
     forward_host_header: Optional[EnabledBoolValueBool] = Field(None, alias='forwardHostHeader')
 
-class Cors(BaseModel):
+class Cors(BaseModelWithAliases):
     enabled: bool
     value: List[str]
 
-class AllowedHttpMethods(BaseModel):
+class AllowedHttpMethods(BaseModelWithAliases):
     enabled: bool
     value: List[str]  #TODO: make enum
 
-class Rewrite(BaseModel):
+class Rewrite(BaseModelWithAliases):
     enabled: bool
     body: str
     flag: str
 
-class SecureKey(BaseModel):
+class SecureKey(BaseModelWithAliases):
     enabled: bool
     key: Optional[str] = Field(None)
     type: str
 
-class IpAddressAcl(BaseModel):
+class IpAddressAcl(BaseModelWithAliases):
     enabled: bool
     excepted_values: List[str] = Field(..., alias='exceptedValues')
     policy_type: str = Field(..., alias='policyType')
 
-class SSLCertificate(BaseModel):
+class SSLCertificate(BaseModelWithAliases):
     type: str
     status: str
 
