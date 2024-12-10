@@ -1,24 +1,19 @@
 import json
 import logging
-from typing import Optional, List, Callable
+from typing import Optional, List
 import uuid
 
 import requests
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from cdnresource import make_default_cdn_resource, make_json_from_object_with_correct_origin_group
-from model import CDNResource
+from app.model import APIProcessor, CDNResource, SSLCertificate, CDNResourceOptions, EdgeCacheSettings
 from utils import repeat_and_sleep
-from apiprocessor import APIProcessor
-
 
 class CDNResourceProcessorResponseError(BaseModel):
     code: int
     message: str
 
-#TODO: use pydantic
-class CDNResourcesProcessor(APIProcessor):
+class CDNResourcesAPIProcessor(APIProcessor):
 
     def get_cdn_resources_ids(self) -> Optional[List[str]]:
         url = f'{self.api_url}/resources?folderId={self.folder_id}'
@@ -85,8 +80,8 @@ class CDNResourcesProcessor(APIProcessor):
     def create_cdn_resource(self, cdn_resource: CDNResource) -> Optional[str]:
         url = f'{self.api_url}/resources/'
         headers = {'Authorization': f'Bearer {self.token}'}
-        if not (payload := make_json_from_object_with_correct_origin_group(cdn_resource)):
-            logging.error('[originGroupId] is absent at cdn_resource')
+        if not (payload := self.make_json_from_object_with_correct_origin_group(cdn_resource)):
+            logging.error('[originGroupId] attribute is absent at cdn_resource object')
             logging.debug(f'cdn_resource: {cdn_resource}')
             return None
 
@@ -136,13 +131,13 @@ class CDNResourcesProcessor(APIProcessor):
             n: int = 1
     ):
         if not cdn_resource:
-            cdn_resource = make_default_cdn_resource(
+            cdn_resource = self.make_default_cdn_resource(
                 folder_id=folder_id,
                 cname='',
                 origin_group_id=origin_group_id
             )
 
-        cname_generator = self.cname_generator(cname_domain=cname_domain)
+        cname_generator = self.random_cname_generator(cname_domain=cname_domain)
         for _ in range(n):
             cdn_resource.cname = next(cname_generator)
             if not self.create_cdn_resource(cdn_resource=cdn_resource):  # на случай, если сгенерирован такой-же cname TODO: заменить на обработку кастомной ошибки одинакового cname
@@ -150,7 +145,7 @@ class CDNResourcesProcessor(APIProcessor):
                 self.create_cdn_resource(cdn_resource=cdn_resource)
 
     @staticmethod
-    def cname_generator(cname_domain: str) -> str:
+    def random_cname_generator(cname_domain: str) -> str:
         while True:
             yield f'{str(uuid.uuid4())[:8]}.{cname_domain}'
 
@@ -200,4 +195,32 @@ class CDNResourcesProcessor(APIProcessor):
             logging.error('bad request')
             logging.debug(request.text)
             return None
+
+    @staticmethod
+    def make_cdn_resource_ssl_certificate_attribute(ssl_type: str = None) -> SSLCertificate:
+        # TODO: make different types
+        if not ssl_type:
+            return SSLCertificate(
+                type='DONT_USE',
+                status='READY'
+            )
+
+    @staticmethod
+    def make_default_cdn_resource(folder_id: str, cname: str, origin_group_id: str, ) -> CDNResource:
+        # options = CDNResourceOptions(edge_cache_settings=EdgeCacheSettings(enabled=True, default_value='10'))
+        return CDNResource(
+            folder_id=folder_id,
+            cname=cname,
+            origin_group_id=origin_group_id,
+            origin_protocol='HTTP',
+            # options=options
+        )
+
+    @staticmethod
+    def make_json_from_object_with_correct_origin_group(cdn_resource: CDNResource) -> Optional[dict]:
+        cdn_resource_dict = cdn_resource.model_dump(exclude_none=True, by_alias=True)
+        if origin_group_id := cdn_resource_dict.get('originGroupId'):
+            cdn_resource_dict['origin'] = {'originGroupId': origin_group_id}
+            return cdn_resource_dict
+        return None
 

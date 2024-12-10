@@ -5,7 +5,7 @@ from typing import Optional
 import requests
 
 
-#TODO: use pydantic
+#TODO: make singletone
 class Authorization:
     def __init__(self, oauth: str, iam_token_url: str):
         self.oauth = oauth

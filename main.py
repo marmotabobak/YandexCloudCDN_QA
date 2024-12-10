@@ -1,9 +1,8 @@
 import logging
 import os
 
-from authorization import Authorization
-from cdnresource import make_default_cdn_resource
-from cdnresourcesapiprocessor import CDNResourcesProcessor
+from app.authorization import Authorization
+from app.cdnresource import CDNResourcesAPIProcessor
 
 #TODO: get logging level from cli args
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
@@ -23,7 +22,7 @@ def main():
     else:
         logging.info('got iam-token')
 
-    cdn_resources_processor = CDNResourcesProcessor(api_url=API_URL, folder_id=FOLDER_ID, token=token)
+    cdn_resources_processor = CDNResourcesAPIProcessor(api_url=API_URL, folder_id=FOLDER_ID, token=token)
 
     cdn_resources_processor.delete_all_cdn_resources()
 

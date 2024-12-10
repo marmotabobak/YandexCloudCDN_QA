@@ -4,6 +4,11 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
+class APIProcessor(BaseModel):
+    token: str
+    api_url: str
+    folder_id: str
+
 class BaseModelWithAliases(BaseModel):
     class Config:
         populate_by_name = True
