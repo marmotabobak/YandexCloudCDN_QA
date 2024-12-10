@@ -24,18 +24,26 @@ def main():
         logging.info('got iam-token')
 
     cdn_resources_processor = CDNResourcesProcessor(api_url=API_URL, folder_id=FOLDER_ID, token=token)
+
     cdn_resources_processor.delete_all_cdn_resources()
 
     #DEBUG
-    default_cname='cdn1123.marmota-bobak.ru'
-    default_origin_group_id = '5261110400389293988'
+    default_cname_domain = 'marmota-bobak.ru'
+    default_origin_group_id = '341382'
 
-    cdn_resource = make_default_cdn_resource(
+    # cdn_resource = make_default_cdn_resource(
+    #     folder_id=FOLDER_ID,
+    #     cname=default_cname,
+    #     origin_group_id=default_origin_group_id
+    # )
+    cdn_resources_processor.create_several_cdn_resources(
         folder_id=FOLDER_ID,
-        cname=default_cname,
-        origin_group_id=default_origin_group_id
+        cname_domain=default_cname_domain,
+        origin_group_id=default_origin_group_id,
+        n = 3
     )
-    cdn_resources_processor.create_cdn_resource(cdn_resource)
+
+    cdn_resources_processor.delete_all_cdn_resources()
 
 if __name__ == '__main__':
     main()

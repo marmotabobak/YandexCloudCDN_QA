@@ -1,45 +1,24 @@
 import json
 import logging
-import time
-from functools import wraps
-from typing import Optional, List, Callable, Any
+from typing import Optional, List, Callable
+import uuid
 
 import requests
 from pydantic import BaseModel
 from pydantic import ValidationError
 
+from cdnresource import make_default_cdn_resource
 from model import CDNResource
+from utils import repeat_and_sleep
+from apiprocessor import APIProcessor
 
-
-def repeat_and_sleep(times_to_repeat: int = 3, sleep_duration: int = 1):
-    def decorator(func: Callable):
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any):
-            logging.info(f'Processing function [{func}] for [{times_to_repeat}] '
-                         f'times with [{sleep_duration}] second(s) sleep...')
-            for i in range(times_to_repeat):
-                logging.info(f'Attempt #{i+1}...')
-                res = func(*args, **kwargs)
-                if res is not None:
-                    return res
-                logging.info(f'...failed. Sleeping for {sleep_duration} second(s)...')
-                time.sleep(sleep_duration)
-            else:
-                logging.error(f'failed to successfully complete func [{func}]')
-                return None
-        return wrapper
-    return decorator
 
 class CDNResourceProcessorResponseError(BaseModel):
     code: int
     message: str
 
 #TODO: use pydantic
-class CDNResourcesProcessor:
-    def __init__(self, api_url: str, folder_id: str, token: str):
-        self.token = token
-        self.api_url = api_url
-        self.folder_id = folder_id
+class CDNResourcesProcessor(APIProcessor):
 
     def get_cdn_resources_ids(self) -> Optional[List[str]]:
         url = f'{self.api_url}/resources?folderId={self.folder_id}'
@@ -61,9 +40,6 @@ class CDNResourcesProcessor:
             ...  # log
             return None
         except KeyError as e:
-            ...  # log
-            return None
-        except Exception as e:
             ...  # log
             return None
 
@@ -102,10 +78,6 @@ class CDNResourcesProcessor:
             logging.error(f'pydantic validation error')
             logging.debug(f'error details: {e}')
             return None
-        except Exception as e:
-            logging.error(f'unknown error')
-            logging.debug(f'error details: {e}')
-            return None
         finally:
             logging.debug(f'response text: {request.text}')
 
@@ -135,9 +107,6 @@ class CDNResourcesProcessor:
                     except ValidationError as e:
                         logging.error('pydantic validation error')
                         logging.debug(f'error details: {e}')
-                    except Exception as e:
-                        logging.debug('unknown error')
-                        logging.debug(f'error details: {e}')
 
                     logging.error(f'API error: {error.message}, code {error.code}')
                     return None
@@ -153,13 +122,37 @@ class CDNResourcesProcessor:
             except KeyError as e:
                 ...  # log
                 return None
-            except Exception as e:
-                ...  # log
-                return None
             finally:
                 logging.debug(f'response text: {request.text}')
         elif response_status == 400:
             logging.error('bad request')
             logging.debug(request.text)
             return None
+
+    def create_several_cdn_resources(
+            self,
+            folder_id: str,
+            cname_domain:str,
+            origin_group_id: str,
+            cdn_resource: CDNResource= None,
+            n: int = 1
+    ):
+        if not cdn_resource:
+            cdn_resource = make_default_cdn_resource(
+                folder_id=folder_id,
+                cname='',
+                origin_group_id=origin_group_id
+            )
+
+        cname_generator = self.cname_generator(cname_domain=cname_domain)
+        for _ in range(n):
+            cdn_resource.cname = next(cname_generator)
+            if not self.create_cdn_resource(cdn_resource=cdn_resource):  # на случай, если сгенерирован такой-же cname TODO: заменить на обработку кастомной ошибки одинакового cname
+                cdn_resource.cname = next(cname_generator)
+                self.create_cdn_resource(cdn_resource=cdn_resource)
+
+    @staticmethod
+    def cname_generator(cname_domain: str) -> str:
+        while True:
+            yield f'{str(uuid.uuid4())[:8]}.{cname_domain}'
 

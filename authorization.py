@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Optional
 
 import requests
@@ -17,22 +18,26 @@ class Authorization:
 
     def _get_iam_token(self) -> Optional[str]:
         payload = {'yandexPassportOauthToken': self.oauth}
-        request = requests.post(url=self.iam_token_url, json=payload)
-
-        if request.status_code != 200:
-            ...  # log
-            return None
-
         try:
-            response_dict = request.json()
-            if token := response_dict.get('iamToken', None):
-                return token
-            else:
+            request = requests.post(url=self.iam_token_url, json=payload)
+
+            if request.status_code != 200:
                 ...  # log
                 return None
-        except json.JSONDecodeError as e:
-            ...  # log
+
+            try:
+                response_dict = request.json()
+                if token := response_dict.get('iamToken', None):
+                    return token
+                else:
+                    ...  # log
+                    return None
+            except json.JSONDecodeError as e:
+                ...  # log
+                return None
+
+        except requests.exceptions.ConnectionError as e:
+            logging.error(f'Connection error')
+            logging.debug(f'error details: {e}')
             return None
-        except Exception as e:
-            ...  # log
-            return None
+
