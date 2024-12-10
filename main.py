@@ -36,11 +36,11 @@ def main():
     #     cname=default_cname,
     #     origin_group_id=default_origin_group_id
     # )
-    cdn_resources_processor.create_several_cdn_resources(
+    cdn_resources_processor.create_several_default_cdn_resources(
         folder_id=FOLDER_ID,
         cname_domain=default_cname_domain,
         origin_group_id=default_origin_group_id,
-        n = 3
+        n = 1
     )
 
     cdn_resources_processor.delete_all_cdn_resources()
