@@ -1,13 +1,12 @@
 import json
 import logging
 from typing import Optional, List
-import uuid
 
 import requests
 from pydantic import BaseModel, ValidationError
 
-from app.model import APIProcessor, CDNResource, SSLCertificate, CDNResourceOptions, EdgeCacheSettings
-from utils import repeat_and_sleep
+from app.model import APIProcessor, CDNResource, SSLCertificate, CDNResourceOptions, EdgeCacheSettings, EnabledBoolValueDictStrStr
+from utils import repeat_and_sleep, make_random_8_symbols
 
 class CDNResourceProcessorResponseError(BaseModel):
     code: int
@@ -147,7 +146,7 @@ class CDNResourcesAPIProcessor(APIProcessor):
     @staticmethod
     def random_cname_generator(cname_domain: str) -> str:
         while True:
-            yield f'{str(uuid.uuid4())[:8]}.{cname_domain}'
+            yield f'{make_random_8_symbols()}.{cname_domain}'
 
     def update_cdn_resource(self, new_cdn_resource: CDNResource):
         url = f'{self.api_url}/resources/'
@@ -207,13 +206,19 @@ class CDNResourcesAPIProcessor(APIProcessor):
 
     @staticmethod
     def make_default_cdn_resource(folder_id: str, cname: str, origin_group_id: str, ) -> CDNResource:
-        # options = CDNResourceOptions(edge_cache_settings=EdgeCacheSettings(enabled=True, default_value='10'))
+        options = CDNResourceOptions(
+            edge_cache_settings=EdgeCacheSettings(enabled=True, default_value='10'),
+            static_headers=EnabledBoolValueDictStrStr(
+                enabled=True,
+                value={make_random_8_symbols(): make_random_8_symbols()}
+            )
+        )
         return CDNResource(
             folder_id=folder_id,
             cname=cname,
             origin_group_id=origin_group_id,
             origin_protocol='HTTP',
-            # options=options
+            options=options
         )
 
     @staticmethod

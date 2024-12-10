@@ -2,6 +2,7 @@ import logging
 import time
 from functools import wraps
 from typing import Callable, Any
+import uuid
 
 
 def repeat_and_sleep(times_to_repeat: int = 3, sleep_duration: int = 1):
@@ -22,3 +23,6 @@ def repeat_and_sleep(times_to_repeat: int = 3, sleep_duration: int = 1):
                 return None
         return wrapper
     return decorator
+
+def make_random_8_symbols():
+    return str(uuid.uuid4())[:8]

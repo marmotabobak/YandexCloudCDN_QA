@@ -42,7 +42,7 @@ def main():
         n = 1
     )
 
-    cdn_resources_processor.delete_all_cdn_resources()
+    # cdn_resources_processor.delete_all_cdn_resources()
 
 if __name__ == '__main__':
     main()

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +19,10 @@ class EnabledBool(BaseModelWithAliases):
 class EnabledBoolValueBool(BaseModelWithAliases):
     enabled: bool
     value: bool
+
+class EnabledBoolValueDictStrStr(BaseModelWithAliases):
+    enabled: bool
+    value: Dict[str, str]
 
 class EdgeCacheSettings(BaseModelWithAliases):
     enabled: bool
@@ -69,24 +73,24 @@ class SSLCertificate(BaseModelWithAliases):
     status: str
 
 class CDNResourceOptions(BaseModelWithAliases):
-    edge_cache_settings: EdgeCacheSettings = Field(..., alias='edgeCacheSettings')
-    browser_cache_settings: EnabledBool = Field(..., alias='browserCacheSettings')
+    edge_cache_settings: Optional[EdgeCacheSettings] = Field(None, alias='edgeCacheSettings')
+    browser_cache_settings: Optional[EnabledBool] = Field(None, alias='browserCacheSettings')
     query_params_options: Optional[QueryParamsOptions] = Field(None, alias='queryParamsOptions')
-    slice: EnabledBoolValueBool
-    compression_options: CompressionOptions = Field(..., alias='compressionOptions')
+    slice: Optional[EnabledBoolValueBool] = Field(None)
+    compression_options: Optional[CompressionOptions] = Field(None, alias='compressionOptions')
     redirect_options: Optional[RedirectOptions] = Field(None, alias='redirectOptions')
     host_options: Optional[HostOptions] = Field(None, alias='hostOptions')
-    static_headers: EnabledBool = Field(..., alias='staticHeaders')
+    static_headers: Optional[EnabledBoolValueDictStrStr] = Field(None, alias='staticHeaders')
     cors: Optional[Cors] = Field(None)
-    stale: EnabledBool
-    allowed_http_methods: AllowedHttpMethods = Field(..., alias='allowedHttpMethods')
-    proxy_cache_methods_set: EnabledBoolValueBool = Field(..., alias='proxyCacheMethodsSet')
-    disable_proxy_forceRanges: EnabledBoolValueBool = Field(..., alias='disableProxyForceRanges')
-    static_request_headers: EnabledBool = Field(..., alias='staticRequestHeaders')
-    custom_server_name: EnabledBool = Field(..., alias='customServerName')
-    ignore_cookie: EnabledBoolValueBool = Field(..., alias='ignoreCookie')
+    stale: Optional[EnabledBool] = Field(None)
+    allowed_http_methods: Optional[AllowedHttpMethods] = Field(None, alias='allowedHttpMethods')
+    proxy_cache_methods_set: Optional[EnabledBoolValueBool] = Field(None, alias='proxyCacheMethodsSet')
+    disable_proxy_forceRanges: Optional[EnabledBoolValueBool] = Field(None, alias='disableProxyForceRanges')
+    static_request_headers: Optional[EnabledBool] = Field(None, alias='staticRequestHeaders')
+    custom_server_name: Optional[EnabledBool] = Field(None, alias='customServerName')
+    ignore_cookie: Optional[EnabledBoolValueBool] = Field(None, alias='ignoreCookie')
     rewrite: Optional[Rewrite] = Field(None)
-    secure_key: SecureKey = Field(..., alias='secureKey')
+    secure_key: Optional[SecureKey] = Field(None, alias='secureKey')
     ip_address_acl: Optional[IpAddressAcl] = Field(None, alias='ipAddressAcl')
 
 class CDNResource(BaseModelWithAliases):
