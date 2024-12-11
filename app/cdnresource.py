@@ -16,27 +16,6 @@ class CDNResourceProcessorResponseError(BaseModel):
 
 class CDNResourcesAPIProcessor(APIProcessor):
 
-    def delete_cdn_resource(self, cdn_id: str) -> None:
-        url = f'{self.api_url}/resources/{cdn_id}'
-        headers = {'Authorization': f'Bearer {self.token}'}
-        request = requests.delete(url=url, headers=headers)
-
-        if request.status_code != 200:
-            ...  # log
-
-        logging.info(f'CDN Resource [{cdn_id}] deleted successfully')
-
-    def delete_several_cdn_resources(self, ids: List[str]) -> None:
-        for cdn_id in ids:
-            self.delete_cdn_resource(cdn_id)
-
-    def delete_all_cdn_resources(self) -> None:
-        if (cdn_resources_list := self.get_items_list()) is not None:
-            for cdn_id in cdn_resources_list:
-                self.delete_cdn_resource(cdn_id=cdn_id)
-        else:
-            logging.info('Trying to delete all CDN Resources... none found to delete')
-
     @repeat_and_sleep(times_to_repeat=3, sleep_duration=1)
     def create_cdn_resource(self, cdn_resource: CDNResource) -> Optional[str]:
         url = f'{self.api_url}/resources/'

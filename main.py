@@ -29,7 +29,7 @@ def main():
         folder_id=FOLDER_ID,
         token=token
     )
-    cdn_resources_processor.delete_all_cdn_resources()
+    cdn_resources_processor.delete_all_items()
 
     #DEBUG
     default_cname_domain = 'marmota-bobak.ru'

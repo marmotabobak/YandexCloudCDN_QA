@@ -27,7 +27,7 @@ class APIProcessor(BaseModel):
     folder_id: str
     query_args: Optional[Dict[str, str]] = None
 
-    def get_items_list(self) -> Optional[List[str]]:
+    def get_items_ids_list(self) -> Optional[List[str]]:
         url = f'{self.api_url}/{self.api_entity.value}?folderId={self.folder_id}'
         headers = {'Authorization': f'Bearer {self.token}'}
         request = requests.get(url=url, headers=headers)
@@ -40,8 +40,8 @@ class APIProcessor(BaseModel):
             response_dict = request.json()
             if 'code' in response_dict:
                 error_code, error_message = response_dict.get('code'), response_dict.get('message')
-                logging.error('Internal error')
-                logging.error(f'Details: code [{error_code}], message [{error_message}]')
+                logging.error('internal error')
+                logging.error(f'details: code [{error_code}], message [{error_message}]')
                 return None
 
             if resources := response_dict.get(self.api_entity.value, None):
@@ -78,3 +78,28 @@ class APIProcessor(BaseModel):
             return None
         finally:
             logging.debug(f'response text: {request.text}')
+
+    def delete_item(self, item_id: str) -> None:
+        url = f'{self.api_url}/{self.api_entity.value}/{item_id}'
+        if self.query_args:
+            url += ''
+
+        headers = {'Authorization': f'Bearer {self.token}'}
+        request = requests.delete(url=url, headers=headers)
+
+        if request.status_code != 200:
+            logging.error(f'status [{request.status_code}], response text [{request.text}]')
+            return None
+
+        logging.info(f'item [{item_id}] deleted successfully')
+
+    def delete_several_items(self, items_ids_list: List[str]) -> None:
+        for item_id in items_ids_list:
+            self.delete_item(item_id=item_id)
+
+    def delete_all_items(self) -> None:
+        if (items_ids_list := self.get_items_ids_list()) is not None:
+            for item_id in items_ids_list:
+                self.delete_item(item_id=item_id)
+        else:
+            logging.info('trying to delete all items... none found to be deleted')
