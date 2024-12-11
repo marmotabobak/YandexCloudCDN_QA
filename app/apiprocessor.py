@@ -2,7 +2,7 @@ from pydantic import BaseModel, ValidationError
 from typing import List, Optional, Dict, Union
 import requests
 import json
-from app.model import CDNResource, EntityName, APIEntity, APIProcessorError
+from app.model import CDNResource, EntityName, APIEntity, APIProcessorError, OriginGroup
 import logging
 from utils import repeat_and_sleep, make_query_string_from_args
 
@@ -114,11 +114,28 @@ class APIProcessor(BaseModel):
         else:
             logging.info(f'trying to delete all [{self.api_entity.value}] items... none found to be deleted')
 
+    # for some subclasses only to redeclare
+    def preprocess_items_dict(self, item_dict: dict) -> dict:
+        return item_dict
+
     @repeat_and_sleep(times_to_repeat=3, sleep_duration=1)
-    def create_item(self, item: Union[dict, CDNResource]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before
+    def create_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before
+
+        try:
+            item_dict = item.model_dump(exclude_none=True, by_alias=True)
+        except ValidationError as e:
+            logging.error('pydantic validation error')
+            logging.debug(f'error details: {e}')
+            return None
+
+        if not (payload := self.preprocess_items_dict(item_dict)):
+            logging.error('error while parsing item to payload')
+            logging.debug(f'item dict: {item_dict}')
+            return None
+
         url = f'{self.api_url}/{self.api_entity.value}/'
         headers = {'Authorization': f'Bearer {self.token}'}
-        request = requests.post(url=url, headers=headers, json=item)
+        request = requests.post(url=url, headers=headers, json=payload)
 
         response_status = request.status_code
         if response_status == 200:
@@ -149,10 +166,10 @@ class APIProcessor(BaseModel):
             #     logging.debug(f'error details: {e}')
             #     return None
             finally:
-                logging.debug(f'request payload: {item}')
+                logging.debug(f'request payload: {payload}')
                 logging.debug(f'response text: {request.text}')
         elif response_status == 400:
             logging.error('bad request')
-            logging.debug(f'request payload: {item}')
+            logging.debug(f'request payload: {payload}')
             logging.debug(f'response text: {request.text}')
             return None

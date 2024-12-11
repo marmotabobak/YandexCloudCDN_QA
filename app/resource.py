@@ -12,20 +12,14 @@ from utils import make_random_8_symbols
 
 class ResourcesAPIProcessor(APIProcessor):
 
-    def create_item(self, item: CDNResource) -> Optional[str]:
-        try:
-            cdn_resource_dict = item.model_dump(exclude_none=True, by_alias=True)
-        except ValidationError as e:
-            logging.error('pydantic validation error')
-            logging.debug(f'error details: {e}')
-            return None
+    def preprocess_items_dict(self, item_dict: dict) -> Optional[dict]:
 
-        if origin_group_id := cdn_resource_dict.get('originGroupId'):
-            cdn_resource_dict['origin'] = {'originGroupId': origin_group_id}
-            return super().create_item(item=cdn_resource_dict)
+        if origin_group_id := item_dict.get('originGroupId'):
+            item_dict['origin'] = {'originGroupId': origin_group_id}
+            return item_dict
         else:
             logging.error('[originGroupId] attribute is absent at cdn_resource object')
-            logging.debug(f'cdn_resource: {item}')
+            logging.debug(f'cdn resource dict: {item_dict}')
             return None
 
     def create_several_default_cdn_resources(

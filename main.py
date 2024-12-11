@@ -5,6 +5,7 @@ from app.authorization import Authorization
 from app.resource import ResourcesAPIProcessor
 from app.origingroup import OriginGroupsAPIProcessor
 from app.apiprocessor import EntityName, APIEntity
+from app.model import OriginGroup, Origin, OriginMeta, OriginMetaCommon
 
 #TODO: get logging level from cli args
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
@@ -31,7 +32,6 @@ def main():
         folder_id=FOLDER_ID,
         token=token
     )
-    resources_processor.delete_all_items()
 
     origin_groups_processor = OriginGroupsAPIProcessor(
         entity_name=EntityName.ORIGIN_GROUP,
@@ -40,23 +40,20 @@ def main():
         folder_id=FOLDER_ID,
         token=token
     )
-    origin_groups_ids = origin_groups_processor.get_items_ids_list()
-    print(origin_groups_ids)
+
+    resources_processor.delete_all_items()
     origin_groups_processor.delete_all_items()
-    origin_groups_ids = origin_groups_processor.get_items_ids_list()
-    print(origin_groups_ids)
 
-    #DEBUG
-    default_cname_domain = 'marmota-bobak.ru'
-    default_origin_group_id = '341382'
+    origin = Origin(source='marmota-bobak.ru', enabled=True)
+    origin_group = OriginGroup(origins=[origin, ], name='test origin', folder_id=FOLDER_ID)
+    origin_group_id = origin_groups_processor.create_item(item=origin_group)
 
-    # cdn_resource = cdn_resources_processor.make_default_cdn_resource(
-    #     folder_id=FOLDER_ID,
-    #     cname='cdn2d1.marmota-bobak.ru',
-    #     origin_group_id=default_origin_group_id
-    # )
-    # cdn_resources_processor.create_item(cdn_resource)
-
+    resource = resources_processor.make_default_cdn_resource(
+        folder_id=FOLDER_ID,
+        cname='cdn.marmota-bobak.ru',
+        origin_group_id=origin_group_id
+    )
+    resource_id = resources_processor.create_item(item=resource)
 
     # cdn_ids = cdn_resources_processor.create_several_default_cdn_resources(
     #     folder_id=FOLDER_ID,
@@ -64,10 +61,9 @@ def main():
     #     origin_group_id=default_origin_group_id,
     #     n = 2
     # )
-    # print(cdn_ids)
-    # print(cdn_resources_processor.get_item(item_id=cdn_ids[0]))
 
-    # cdn_resources_processor.delete_all_cdn_resources()
+
+
 
 if __name__ == '__main__':
     main()
