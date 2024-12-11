@@ -22,8 +22,12 @@ def main():
     else:
         logging.info('got iam-token')
 
-    cdn_resources_processor = CDNResourcesAPIProcessor(api_url=API_URL, folder_id=FOLDER_ID, token=token)
-
+    cdn_resources_processor = CDNResourcesAPIProcessor(
+        api_url=API_URL,
+        api_url_module_name='resources',
+        folder_id=FOLDER_ID,
+        token=token
+    )
     cdn_resources_processor.delete_all_cdn_resources()
 
     #DEBUG

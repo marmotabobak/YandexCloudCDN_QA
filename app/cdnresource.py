@@ -5,7 +5,8 @@ from typing import Optional, List
 import requests
 from pydantic import BaseModel, ValidationError
 
-from app.model import APIProcessor, CDNResource, SSLCertificate, CDNResourceOptions, EdgeCacheSettings, EnabledBoolValueDictStrStr
+from app.model import CDNResource, SSLCertificate, CDNResourceOptions, EdgeCacheSettings, EnabledBoolValueDictStrStr
+from app.apiprocessor import APIProcessor
 from utils import repeat_and_sleep, make_random_8_symbols
 
 class CDNResourceProcessorResponseError(BaseModel):
@@ -13,29 +14,6 @@ class CDNResourceProcessorResponseError(BaseModel):
     message: str
 
 class CDNResourcesAPIProcessor(APIProcessor):
-
-    def get_cdn_resources_ids(self) -> Optional[List[str]]:
-        url = f'{self.api_url}/resources?folderId={self.folder_id}'
-        headers = {'Authorization': f'Bearer {self.token}'}
-        request = requests.get(url=url, headers=headers)
-
-        if request.status_code != 200:
-            ...  # log
-            return None
-
-        try:
-            response_dict = request.json()
-            if resources := response_dict.get('resources', None):
-                return [resource['id'] for resource in resources]
-            else:
-                ...  # log
-                return None
-        except json.JSONDecodeError as e:
-            ...  # log
-            return None
-        except KeyError as e:
-            ...  # log
-            return None
 
     def get_cdn_resource(self, cdn_id: str) -> Optional[CDNResource]:
         url = f'{self.api_url}/resources/{cdn_id}'
@@ -69,7 +47,7 @@ class CDNResourcesAPIProcessor(APIProcessor):
             self.delete_cdn_resource(cdn_id)
 
     def delete_all_cdn_resources(self) -> None:
-        if (cdn_resources_list := self.get_cdn_resources_ids()) is not None:
+        if (cdn_resources_list := self.get_items_list()) is not None:
             for cdn_id in cdn_resources_list:
                 self.delete_cdn_resource(cdn_id=cdn_id)
         else:
