@@ -153,6 +153,7 @@ class APIProcessor(BaseModel):
                     return None
 
                 if item_id := response_dict.get('metadata', {}).get(self.entity_name.value+'Id'):
+                    item.id = item_id
                     logging.info(f'{self.entity_name.value} [{item_id}] created successfully')
                     logging.debug(response_dict)
                     return item_id
