@@ -3,6 +3,7 @@ import os
 
 from app.authorization import Authorization
 from app.cdnresource import CDNResourcesAPIProcessor
+from app.apiprocessor import APIEntity
 
 #TODO: get logging level from cli args
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
@@ -24,7 +25,7 @@ def main():
 
     cdn_resources_processor = CDNResourcesAPIProcessor(
         api_url=API_URL,
-        api_url_module_name='resources',
+        api_entity=APIEntity.CDN_RESOURCE,
         folder_id=FOLDER_ID,
         token=token
     )
