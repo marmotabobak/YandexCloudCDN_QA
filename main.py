@@ -40,12 +40,14 @@ def main():
     #     cname=default_cname,
     #     origin_group_id=default_origin_group_id
     # )
-    cdn_resources_processor.create_several_default_cdn_resources(
+    cdn_ids = cdn_resources_processor.create_several_default_cdn_resources(
         folder_id=FOLDER_ID,
         cname_domain=default_cname_domain,
         origin_group_id=default_origin_group_id,
         n = 1
     )
+    # print(cdn_ids)
+    print(cdn_resources_processor.get_item(item_id=cdn_ids[0]))
 
     # cdn_resources_processor.delete_all_cdn_resources()
 

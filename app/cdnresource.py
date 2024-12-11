@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import requests
 from pydantic import BaseModel, ValidationError
@@ -12,25 +12,9 @@ from utils import repeat_and_sleep, make_random_8_symbols
 class CDNResourceProcessorResponseError(BaseModel):
     code: int
     message: str
+    details: List[Dict[str, str]]
 
 class CDNResourcesAPIProcessor(APIProcessor):
-
-    def get_cdn_resource(self, cdn_id: str) -> Optional[CDNResource]:
-        url = f'{self.api_url}/resources/{cdn_id}'
-        headers = {'Authorization': f'Bearer {self.token}'}
-        request = requests.get(url=url, headers=headers)
-        try:
-            return CDNResource.model_validate(request.json())
-        except json.JSONDecodeError as e:
-            logging.error(f'json decode error')
-            logging.debug(f'error details: {e}')
-            return None
-        except ValidationError as e:
-            logging.error(f'pydantic validation error')
-            logging.debug(f'error details: {e}')
-            return None
-        finally:
-            logging.debug(f'response text: {request.text}')
 
     def delete_cdn_resource(self, cdn_id: str) -> None:
         url = f'{self.api_url}/resources/{cdn_id}'
@@ -85,10 +69,12 @@ class CDNResourcesAPIProcessor(APIProcessor):
                     return cdn_resource_id
 
             except json.JSONDecodeError as e:
-                ...  # log
+                logging.error('JSONDecodeError')
+                logging.debug(f'error details: {e}')
                 return None
             except KeyError as e:
-                ...  # log
+                logging.error('No such key')
+                logging.debug(f'error details: {e}')
                 return None
             finally:
                 logging.debug(f'request payload: {payload}')
@@ -106,7 +92,10 @@ class CDNResourcesAPIProcessor(APIProcessor):
             origin_group_id: str,
             cdn_resource: CDNResource=None,
             n: int = 1
-    ):
+    ) -> Optional[List[str]]:
+
+        res = []
+
         if not cdn_resource:
             cdn_resource = self.make_default_cdn_resource(
                 folder_id=folder_id,
@@ -115,11 +104,22 @@ class CDNResourcesAPIProcessor(APIProcessor):
             )
 
         cname_generator = self.random_cname_generator(cname_domain=cname_domain)
-        for _ in range(n):
+        for i in range(n):
             cdn_resource.cname = next(cname_generator)
-            if not self.create_cdn_resource(cdn_resource=cdn_resource):  # на случай, если сгенерирован такой-же cname TODO: заменить на обработку кастомной ошибки одинакового cname
+            if not (cdn_id := self.create_cdn_resource(cdn_resource=cdn_resource)):  # на случай, если сгенерирован такой-же cname TODO: заменить на обработку кастомной ошибки одинакового cname
                 cdn_resource.cname = next(cname_generator)
-                self.create_cdn_resource(cdn_resource=cdn_resource)
+                if not (cdn_id := self.create_cdn_resource(cdn_resource=cdn_resource)):
+                    logging.error(f'Error creating cdn resource #{i}')
+            res.append(cdn_id)
+
+
+        if not res:
+            logging.error('Error while creating resources: none resources created')
+
+        logging.info(f'{len(res)} resources created')
+        logging.debug('resources created: ', res)
+
+        return res
 
     @staticmethod
     def random_cname_generator(cname_domain: str) -> str:
