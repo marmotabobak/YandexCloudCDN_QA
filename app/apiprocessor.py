@@ -1,5 +1,3 @@
-from dataclasses import Field
-
 from pydantic import BaseModel, ValidationError
 from typing import List, Optional, Dict, Union
 import requests

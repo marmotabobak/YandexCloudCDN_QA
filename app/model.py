@@ -14,10 +14,10 @@ class APIEntity(Enum):
 
 
 class APIProcessorError(BaseModel):
-    code: Optional[int] = None
+    code: Optional[int] = Field(None)
     message: str
-    details: Optional[List[Dict[str, str]]] = None
-    error: Optional[str] = None
+    details: Optional[List[Dict[str, str]]] = Field(None)
+    error: Optional[str] = Field(None)
 
 
 class BaseModelWithAliases(BaseModel):
@@ -117,4 +117,25 @@ class CDNResource(BaseModelWithAliases):
     origin_group_id: str = Field(..., alias='originGroupId')
     origin_group_name: Optional[str] = Field(None, alias='originGroupName')
     origin_protocol: str = Field(..., alias='originProtocol')
+
+class OriginMetaCommon(BaseModelWithAliases):
+    name: str
+
+class OriginMeta(BaseModelWithAliases):
+    common: OriginMetaCommon
+
+class Origin(BaseModelWithAliases):
+    source: str
+    enabled: Optional[bool] = Field(None)
+    id: Optional[str] = Field(None)
+    origin_group_id: Optional[str] = Field(None, alias='originGroupId')
+    backup: Optional[bool] = Field(None)
+    meta: Optional[OriginMeta] = Field(None)
+
+class OriginGroup(BaseModelWithAliases):
+    use_next: Optional[bool] = Field(None, alias='useNext')
+    origins: List[Origin]
+    id: Optional[str] = Field(None)
+    folder_id: str = Field(..., alias='folderId')
+    name: str
 

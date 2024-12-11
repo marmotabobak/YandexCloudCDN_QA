@@ -10,7 +10,7 @@ from app.apiprocessor import APIProcessor
 from utils import make_random_8_symbols
 
 
-class CDNResourcesAPIProcessor(APIProcessor):
+class ResourcesAPIProcessor(APIProcessor):
 
     def create_item(self, item: CDNResource) -> Optional[str]:
         try:

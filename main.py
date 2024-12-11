@@ -2,7 +2,8 @@ import logging
 import os
 
 from app.authorization import Authorization
-from app.cdnresource import CDNResourcesAPIProcessor
+from app.resource import ResourcesAPIProcessor
+from app.origingroup import OriginGroupsAPIProcessor
 from app.apiprocessor import EntityName, APIEntity
 
 #TODO: get logging level from cli args
@@ -23,14 +24,24 @@ def main():
     else:
         logging.info('got iam-token')
 
-    cdn_resources_processor = CDNResourcesAPIProcessor(
-        entity_name=EntityName.CDN_RESOURCE,
+    # cdn_resources_processor = ResourcesAPIProcessor(
+    #     entity_name=EntityName.CDN_RESOURCE,
+    #     api_url=API_URL,
+    #     api_entity=APIEntity.CDN_RESOURCE,
+    #     folder_id=FOLDER_ID,
+    #     token=token
+    # )
+    # cdn_resources_processor.delete_all_items()
+
+    origin_groups_processor = OriginGroupsAPIProcessor(
+        entity_name=EntityName.ORIGIN_GROUP,
         api_url=API_URL,
-        api_entity=APIEntity.CDN_RESOURCE,
+        api_entity=APIEntity.ORIGIN_GROUP,
         folder_id=FOLDER_ID,
         token=token
     )
-    cdn_resources_processor.delete_all_items()
+    origin_groups_ids = origin_groups_processor.get_items_ids_list()
+    print(origin_groups_ids)
 
     #DEBUG
     default_cname_domain = 'marmota-bobak.ru'
@@ -44,13 +55,13 @@ def main():
     # cdn_resources_processor.create_item(cdn_resource)
 
 
-    cdn_ids = cdn_resources_processor.create_several_default_cdn_resources(
-        folder_id=FOLDER_ID,
-        cname_domain=default_cname_domain,
-        origin_group_id=default_origin_group_id,
-        n = 2
-    )
-    print(cdn_ids)
+    # cdn_ids = cdn_resources_processor.create_several_default_cdn_resources(
+    #     folder_id=FOLDER_ID,
+    #     cname_domain=default_cname_domain,
+    #     origin_group_id=default_origin_group_id,
+    #     n = 2
+    # )
+    # print(cdn_ids)
     # print(cdn_resources_processor.get_item(item_id=cdn_ids[0]))
 
     # cdn_resources_processor.delete_all_cdn_resources()
