@@ -24,14 +24,14 @@ def main():
     else:
         logging.info('got iam-token')
 
-    # cdn_resources_processor = ResourcesAPIProcessor(
-    #     entity_name=EntityName.CDN_RESOURCE,
-    #     api_url=API_URL,
-    #     api_entity=APIEntity.CDN_RESOURCE,
-    #     folder_id=FOLDER_ID,
-    #     token=token
-    # )
-    # cdn_resources_processor.delete_all_items()
+    resources_processor = ResourcesAPIProcessor(
+        entity_name=EntityName.CDN_RESOURCE,
+        api_url=API_URL,
+        api_entity=APIEntity.CDN_RESOURCE,
+        folder_id=FOLDER_ID,
+        token=token
+    )
+    resources_processor.delete_all_items()
 
     origin_groups_processor = OriginGroupsAPIProcessor(
         entity_name=EntityName.ORIGIN_GROUP,
@@ -40,6 +40,9 @@ def main():
         folder_id=FOLDER_ID,
         token=token
     )
+    origin_groups_ids = origin_groups_processor.get_items_ids_list()
+    print(origin_groups_ids)
+    origin_groups_processor.delete_all_items()
     origin_groups_ids = origin_groups_processor.get_items_ids_list()
     print(origin_groups_ids)
 

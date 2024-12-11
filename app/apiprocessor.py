@@ -4,7 +4,7 @@ import requests
 import json
 from app.model import CDNResource, EntityName, APIEntity, APIProcessorError
 import logging
-from utils import repeat_and_sleep
+from utils import repeat_and_sleep, make_query_string_from_args
 
 
 class APIProcessor(BaseModel):
@@ -74,14 +74,31 @@ class APIProcessor(BaseModel):
 
     def delete_item(self, item_id: str) -> None:
         url = f'{self.api_url}/{self.api_entity.value}/{item_id}'
-        if self.query_args:
-            url += ''
+        url += f'?{make_query_string_from_args(self.query_args)}' if self.query_args else ''
 
         headers = {'Authorization': f'Bearer {self.token}'}
         request = requests.delete(url=url, headers=headers)
 
         if request.status_code != 200:
             logging.error(f'status [{request.status_code}], response text [{request.text}]')
+            return None
+
+        try:
+            response_dict = request.json()
+            if 'code' in response_dict:
+                error_code, error_message = response_dict.get('code'), response_dict.get('message')
+                logging.error('internal error')
+                logging.error(f'details: code [{error_code}], message [{error_message}]')
+                return None
+
+            if error := response_dict.get('error'):
+                error_code, error_message = error.get('code'), error.get('message')
+                logging.error('internal error')
+                logging.error(f'details: code [{error_code}], message [{error_message}]')
+                return None
+
+        except json.JSONDecodeError as e:
+            logging.debug(f'JSONDecodeError, details: {e}')
             return None
 
         logging.info(f'item [{item_id}] deleted successfully')
@@ -95,7 +112,7 @@ class APIProcessor(BaseModel):
             for item_id in items_ids_list:
                 self.delete_item(item_id=item_id)
         else:
-            logging.info('trying to delete all items... none found to be deleted')
+            logging.info(f'trying to delete all [{self.api_entity.value}] items... none found to be deleted')
 
     @repeat_and_sleep(times_to_repeat=3, sleep_duration=1)
     def create_item(self, item: Union[dict, CDNResource]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before
