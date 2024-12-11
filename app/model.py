@@ -1,7 +1,24 @@
 from datetime import datetime
 from typing import Optional, List, Dict
+from enum import Enum
 
 from pydantic import BaseModel, Field
+
+class EntityName(Enum):
+    CDN_RESOURCE = 'resource'
+    ORIGIN_GROUP = 'originGroup'
+
+class APIEntity(Enum):
+    CDN_RESOURCE = 'resources'
+    ORIGIN_GROUP = 'originGroups'
+
+
+class APIProcessorError(BaseModel):
+    code: Optional[int] = None
+    message: str
+    details: Optional[List[Dict[str, str]]] = None
+    error: Optional[str] = None
+
 
 class BaseModelWithAliases(BaseModel):
     class Config:

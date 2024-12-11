@@ -1,20 +1,32 @@
 import json
 import logging
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Iterator
 
 import requests
 from pydantic import BaseModel, ValidationError
 
-from app.model import CDNResource, SSLCertificate, CDNResourceOptions, EdgeCacheSettings, EnabledBoolValueDictStrStr
+from app.model import CDNResource, SSLCertificate, CDNResourceOptions, EdgeCacheSettings, EnabledBoolValueDictStrStr, APIProcessorError
 from app.apiprocessor import APIProcessor
-from utils import repeat_and_sleep, make_random_8_symbols
+from utils import make_random_8_symbols
 
-class CDNResourceProcessorResponseError(BaseModel):
-    code: int
-    message: str
-    details: List[Dict[str, str]]
 
 class CDNResourcesAPIProcessor(APIProcessor):
+
+    def create_item(self, item: CDNResource) -> Optional[str]:
+        try:
+            cdn_resource_dict = item.model_dump(exclude_none=True, by_alias=True)
+        except ValidationError as e:
+            logging.error('pydantic validation error')
+            logging.debug(f'error details: {e}')
+            return None
+
+        if origin_group_id := cdn_resource_dict.get('originGroupId'):
+            cdn_resource_dict['origin'] = {'originGroupId': origin_group_id}
+            return super().create_item(item=cdn_resource_dict)
+        else:
+            logging.error('[originGroupId] attribute is absent at cdn_resource object')
+            logging.debug(f'cdn_resource: {item}')
+            return None
 
     def create_several_default_cdn_resources(
             self,
@@ -37,11 +49,13 @@ class CDNResourcesAPIProcessor(APIProcessor):
         cname_generator = self.random_cname_generator(cname_domain=cname_domain)
         for i in range(n):
             cdn_resource.cname = next(cname_generator)
-            if not (cdn_id := self.create_item(item=cdn_resource)):  # на случай, если сгенерирован такой-же cname TODO: заменить на обработку кастомной ошибки одинакового cname
-                cdn_resource.cname = next(cname_generator)
+            if not (cdn_id := self.create_item(item=cdn_resource)):
+                cdn_resource.cname = next(cname_generator)  # крайне маловероятно, но повторно генерим cname - на случай, если предыдущий совпал с уже существующим TODO: заменить на обработку кастомной ошибки одинакового cname
                 if not (cdn_id := self.create_item(item=cdn_resource)):
                     logging.error(f'Error creating cdn resource #{i}')
+
             if cdn_id:
+                logging.info(f'сdn resource #{i} with id [{cdn_id}] created')
                 res.append(cdn_id)
 
 
@@ -54,7 +68,7 @@ class CDNResourcesAPIProcessor(APIProcessor):
         return res
 
     @staticmethod
-    def random_cname_generator(cname_domain: str) -> str:
+    def random_cname_generator(cname_domain: str) -> Iterator[str]:
         while True:
             yield f'{make_random_8_symbols()}.{cname_domain}'
 
@@ -79,7 +93,7 @@ class CDNResourcesAPIProcessor(APIProcessor):
 
                 if error := response_dict.get('error'):
                     try:
-                        error = CDNResourceProcessorResponseError.model_validate(error)
+                        error = APIProcessorError.model_validate(error)
                     except ValidationError as e:
                         logging.error('pydantic validation error')
                         logging.debug(f'error details: {e}')
@@ -130,20 +144,4 @@ class CDNResourcesAPIProcessor(APIProcessor):
             origin_protocol='HTTP',
             options=options
         )
-
-    def create_item(self, item: CDNResource) -> Optional[str]:
-        try:
-            cdn_resource_dict = item.model_dump(exclude_none=True, by_alias=True)
-        except ValidationError as e:
-            logging.error('pydantic validation error')
-            logging.debug(f'error details: {e}')
-            return None
-
-        if origin_group_id := cdn_resource_dict.get('originGroupId'):
-            cdn_resource_dict['origin'] = {'originGroupId': origin_group_id}
-            return super().create_item(item=cdn_resource_dict)
-        else:
-            logging.error('[originGroupId] attribute is absent at cdn_resource object')
-            logging.debug(f'cdn_resource: {item}')
-            return None
 

@@ -4,25 +4,9 @@ from pydantic import BaseModel, ValidationError
 from typing import List, Optional, Dict, Union
 import requests
 import json
-from enum import Enum
-from app.model import CDNResource
+from app.model import CDNResource, EntityName, APIEntity, APIProcessorError
 import logging
 from utils import repeat_and_sleep
-
-class EntityName(Enum):
-    CDN_RESOURCE = 'resource'
-    ORIGIN_GROUP = 'originGroup'
-
-class APIEntity(Enum):
-    CDN_RESOURCE = 'resources'
-    ORIGIN_GROUP = 'originGroups'
-
-
-class APIProcessorError(BaseModel):
-    code: Optional[int] = None
-    message: str
-    details: Optional[List[Dict[str, str]]] = None
-    error: Optional[str] = None
 
 
 class APIProcessor(BaseModel):
