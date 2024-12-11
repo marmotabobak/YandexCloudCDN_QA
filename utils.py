@@ -4,7 +4,7 @@ from functools import wraps
 from typing import Callable, Any
 import uuid
 
-
+# need for requesting API several times with pause as API methods may be completed not instantly
 def repeat_and_sleep(times_to_repeat: int = 3, sleep_duration: int = 1):
     def decorator(func: Callable):
         @wraps(func)

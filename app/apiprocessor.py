@@ -1,12 +1,17 @@
 from dataclasses import Field
 
 from pydantic import BaseModel, ValidationError
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 import requests
 import json
 from enum import Enum
 from app.model import CDNResource
 import logging
+from utils import repeat_and_sleep
+
+class EntityName(Enum):
+    CDN_RESOURCE = 'resource'
+    ORIGIN_GROUP = 'originGroup'
 
 class APIEntity(Enum):
     CDN_RESOURCE = 'resources'
@@ -21,6 +26,7 @@ class APIProcessorError(BaseModel):
 
 
 class APIProcessor(BaseModel):
+    entity_name: EntityName
     token: str
     api_url: str
     api_entity: APIEntity
@@ -48,17 +54,22 @@ class APIProcessor(BaseModel):
                 logging.debug(f'response text: {request.text}')
                 return [resource['id'] for resource in resources]
             else:
-                logging.debug(f'empty list, response text: [{request.text}]')
+                logging.debug(f'no responses list found, response text: [{request.text}]')
                 return None
 
         except json.JSONDecodeError as e:
-            ...  # log
+            logging.debug(f'JSONDecodeError, details: {e}')
             return None
-        except KeyError as e:
-            ...  # log
-            return None
+        # except KeyError as e:
+        #     logging.debug(f'JSONDecodeError, details: {e}')
+        #     return None
 
     def get_item(self, item_id: str) -> Optional[CDNResource]:
+
+        if not item_id:
+            logging.error(f'None or empty item_id: [{item_id}]')
+            return None
+
         url = f'{self.api_url}/{self.api_entity.value}/{item_id}'
         if self.query_args:
             url += ''
@@ -103,3 +114,46 @@ class APIProcessor(BaseModel):
                 self.delete_item(item_id=item_id)
         else:
             logging.info('trying to delete all items... none found to be deleted')
+
+    @repeat_and_sleep(times_to_repeat=3, sleep_duration=1)
+    def create_item(self, item: Union[dict, CDNResource]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before
+        url = f'{self.api_url}/{self.api_entity.value}/'
+        headers = {'Authorization': f'Bearer {self.token}'}
+        request = requests.post(url=url, headers=headers, json=item)
+
+        response_status = request.status_code
+        if response_status == 200:
+            try:
+                response_dict = request.json()
+
+                if error := response_dict.get('error'):
+                    try:
+                        error = APIProcessorError.model_validate(error)
+                    except ValidationError as e:
+                        logging.error('pydantic validation error')
+                        logging.debug(f'error details: {e}')
+                        return None
+                    logging.error(f'API error: {error.message}, code {error.code}')
+                    return None
+
+                if item_id := response_dict.get('metadata', {}).get(self.entity_name.value+'Id'):
+                    logging.info(f'{self.entity_name.value} [{item_id}] created successfully')
+                    logging.debug(response_dict)
+                    return item_id
+
+            except json.JSONDecodeError as e:
+                logging.error('JSONDecodeError')
+                logging.debug(f'error details: {e}')
+                return None
+            # except KeyError as e:
+            #     logging.error('No such key')
+            #     logging.debug(f'error details: {e}')
+            #     return None
+            finally:
+                logging.debug(f'request payload: {item}')
+                logging.debug(f'response text: {request.text}')
+        elif response_status == 400:
+            logging.error('bad request')
+            logging.debug(f'request payload: {item}')
+            logging.debug(f'response text: {request.text}')
+            return None
