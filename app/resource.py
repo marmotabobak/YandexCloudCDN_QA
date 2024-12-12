@@ -24,7 +24,6 @@ class ResourcesAPIProcessor(APIProcessor):
 
     def create_several_default_cdn_resources(
             self,
-            folder_id: str,
             cname_domain:str,
             origin_group_id: str,
             cdn_resource: CDNResource=None,
@@ -35,7 +34,7 @@ class ResourcesAPIProcessor(APIProcessor):
 
         if not cdn_resource:
             cdn_resource = self.make_default_cdn_resource(
-                folder_id=folder_id,
+                folder_id=self.folder_id,
                 cname='',
                 origin_group_id=origin_group_id
             )
@@ -46,10 +45,10 @@ class ResourcesAPIProcessor(APIProcessor):
             if not (cdn_id := self.create_item(item=cdn_resource)):
                 cdn_resource.cname = next(cname_generator)  # крайне маловероятно, но повторно генерим cname - на случай, если предыдущий совпал с уже существующим TODO: заменить на обработку кастомной ошибки одинакового cname
                 if not (cdn_id := self.create_item(item=cdn_resource)):
-                    logging.error(f'Error creating cdn resource #{i}')
+                    logging.error(f'Error creating cdn resource #{i+1}')
 
             if cdn_id:
-                logging.info(f'сdn resource #{i} with id [{cdn_id}] created')
+                logging.info(f'сdn resource #{i+1} with id [{cdn_id}] created')
                 res.append(cdn_id)
 
 
@@ -128,7 +127,7 @@ class ResourcesAPIProcessor(APIProcessor):
             edge_cache_settings=EdgeCacheSettings(enabled=True, default_value='10'),
             static_headers=EnabledBoolValueDictStrStr(
                 enabled=True,
-                value={make_random_8_symbols(): make_random_8_symbols()}
+                value={'foo': make_random_8_symbols()}
             )
         )
         return CDNResource(

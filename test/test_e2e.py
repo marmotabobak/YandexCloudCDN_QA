@@ -36,11 +36,11 @@ def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
                     res = func(*args, **kwargs)
                     return res
                 except AssertionError as e:
-                    print(f'Attempt #{i+1} of {times} failed. Sleeping for {pause} seconds...')
+                    print(f'Attempt #{i+1} of {times} failed. Sleeping for {pause} seconds...', end='')
                     exception = e
                     time.sleep(pause)
                     continue
-            print(f'All attempts failed.')
+            print(f'All attempts failed.', end='')
             raise exception
         return wrapper
     return decorator
@@ -78,13 +78,13 @@ def resource(origin_group_id) -> str:
 
 @pytest.fixture
 def delete_all_origin_groups():
-    time.sleep(API_SLEEP)
     origin_groups_processor.delete_all_items()
+    time.sleep(API_SLEEP)
 
 @pytest.fixture
 def delete_all_resources():
-    time.sleep(API_SLEEP)
     resources_processor.delete_all_items()
+    time.sleep(API_SLEEP)
 
 @pytest.fixture
 def delete_all_items(delete_all_resources, delete_all_origin_groups):

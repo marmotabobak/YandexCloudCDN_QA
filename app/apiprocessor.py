@@ -167,10 +167,10 @@ class APIProcessor(BaseModel):
             #     logging.debug(f'error details: {e}')
             #     return None
             finally:
-                logging.debug(f'request payload: {payload}')
+                logging.debug(f'request payload: {json.dumps(payload)}')
                 logging.debug(f'response text: {request.text}')
         elif response_status == 400:
             logging.error('bad request')
-            logging.debug(f'request payload: {payload}')
+            logging.debug(f'request payload: {json.dumps(payload)}')
             logging.debug(f'response text: {request.text}')
             return None
