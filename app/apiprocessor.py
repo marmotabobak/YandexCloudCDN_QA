@@ -46,7 +46,7 @@ class APIProcessor(BaseModel):
         #     logging.debug(f'JSONDecodeError, details: {e}')
         #     return None
 
-    def get_item(self, item_id: str) -> Optional[CDNResource]:
+    def get_item_by_id(self, item_id: str) -> Optional[CDNResource]:
 
         if not item_id:
             logging.error(f'None or empty item_id: [{item_id}]')
@@ -72,7 +72,8 @@ class APIProcessor(BaseModel):
         finally:
             logging.debug(f'response text: {request.text}')
 
-    def delete_item(self, item_id: str) -> None:
+    @repeat_and_sleep(times_to_repeat=5, sleep_duration=1)
+    def delete_item_by_id(self, item_id: str) -> Optional[bool]:
         url = f'{self.api_url}/{self.api_entity.value}/{item_id}'
         url += f'?{make_query_string_from_args(self.query_args)}' if self.query_args else ''
 
@@ -102,23 +103,27 @@ class APIProcessor(BaseModel):
             return None
 
         logging.info(f'item [{item_id}] deleted successfully')
+        return True
 
-    def delete_several_items(self, items_ids_list: List[str]) -> None:
+    def delete_several_items_by_ids(self, items_ids_list: List[str]) -> None:
         for item_id in items_ids_list:
-            self.delete_item(item_id=item_id)
+            self.delete_item_by_id(item_id=item_id)
 
-    def delete_all_items(self) -> None:
+    def delete_all_items(self) -> bool:
+        res = True
         if (items_ids_list := self.get_items_ids_list()) is not None:
             for item_id in items_ids_list:
-                self.delete_item(item_id=item_id)
+                if not self.delete_item_by_id(item_id=item_id):
+                    res = False
         else:
             logging.info(f'trying to delete all [{self.api_entity.value}] items... none found to be deleted')
+        return res
 
     # for some subclasses only to redeclare
     def preprocess_items_dict(self, item_dict: dict) -> dict:
         return item_dict
 
-    @repeat_and_sleep(times_to_repeat=3, sleep_duration=1)
+    @repeat_and_sleep(times_to_repeat=5, sleep_duration=1)
     def create_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before
 
         try:

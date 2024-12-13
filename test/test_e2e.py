@@ -3,8 +3,9 @@ import time
 import pytest
 import requests
 import os
-from typing import Callable, Any
+from typing import Callable, Any, List
 from functools import wraps
+from datetime import datetime, timedelta
 
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
@@ -20,91 +21,147 @@ assert (token := authorization.get_token()), 'Error while getting token'
 #TODO: !!! dns cname needs to be created before tests
 
 API_URL = 'https://cdn.api.cloud.yandex.net/cdn/v1'
-ORIGIN_URL = 'http://marmota-bobak.ru'
+ORIGIN_DOMAIN = 'marmota-bobak.ru'
+ORIGIN_FULL_URL = 'http://marmota-bobak.ru'
 RESOURCE_CNAME = 'cdn.marmota-bobak.ru'
 CDN_URL = 'http://cdn.marmota-bobak.ru'
 FOLDER_ID = os.environ['FOLDER_ID']  #TODO: get from cli args/config
 API_SLEEP = 5
+API_DELAY = 5 # should be 4 minutes (2*2) = 240 seconds
 
 def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
     def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            exception = None
             for i in range(times):
+                print(f'Attempt #{i + 1} of {times}...', end='')
                 try:
                     res = func(*args, **kwargs)
+                    print()
                     return res
-                except AssertionError as e:
-                    print(f'Attempt #{i+1} of {times} failed. Sleeping for {pause} seconds...', end='')
-                    exception = e
+                except AssertionError:
+                    print(f'...failed. Sleeping for {pause} seconds...', end='')
                     time.sleep(pause)
                     continue
-            print(f'All attempts failed.', end='')
-            raise exception
+            pytest.fail('All attempts failed.')
         return wrapper
     return decorator
 
-origin_groups_processor = OriginGroupsAPIProcessor(
-    entity_name=EntityName.ORIGIN_GROUP,
-    api_url=API_URL,
-    api_entity=APIEntity.ORIGIN_GROUP,
-    folder_id=FOLDER_ID,
-    token=token
-)
+def resources_are_not_alive(cnames: List[str]) -> bool:
+    sleep = 10
+    attempt = 1
+    ok = True
+    now = datetime.now()
+    finish_time = now + timedelta(seconds=API_DELAY)
 
-resources_processor = ResourcesAPIProcessor(
-    entity_name=EntityName.CDN_RESOURCE,
-    api_url=API_URL,
-    api_entity=APIEntity.CDN_RESOURCE,
-    folder_id=FOLDER_ID,
-    token=token
-)
+    print(f'Checking resources availability for {API_DELAY} seconds...')
+    while True:
+        print(f'Attempt #{attempt}')
+        for cname in cnames:
+            try:
+                print(f'GET {cname}...', end='')
+                request = requests.get(url='http://' + cname)
+                if request.status_code != 404:  # TODO: think about this check
+                    ok = False
+                    print(f'false (status code {request.status_code})')
+                    break
+                print('ok (status 404)')
+            except requests.exceptions.ConnectionError:  # DNS CNAME records should be created hence should be reachable TODO remake with DNS creation
+                ok = False
 
-@pytest.fixture
-def origin_group_id() -> str:
-    origin = Origin(source='marmota-bobak.ru', enabled=True)
-    origin_group = OriginGroup(origins=[origin, ], name='test origin', folder_id=FOLDER_ID)
-    return origin_groups_processor.create_item(item=origin_group)
+        if not ok:
+            break
 
-@pytest.fixture
-def resource(origin_group_id) -> str:
-    resource = resources_processor.make_default_cdn_resource(
-        folder_id=FOLDER_ID,
-        cname=RESOURCE_CNAME,
-        origin_group_id=origin_group_id
-    )
-    return resources_processor.create_item(item=resource)
+        print(f'Intermediate success: all resources are 404.')
+        if (now := datetime.now()) < finish_time:
+            seconds_left = (finish_time-now).seconds
+            print(f'{seconds_left} seconds left')
+            print(f'Sleeping for {sleep} seconds...')
+            time.sleep(sleep)
+            attempt += 1
+        else:
+            break
 
-@pytest.fixture
-def delete_all_origin_groups():
-    origin_groups_processor.delete_all_items()
-    time.sleep(API_SLEEP)
-
-@pytest.fixture
-def delete_all_resources():
-    resources_processor.delete_all_items()
-    time.sleep(API_SLEEP)
-
-@pytest.fixture
-def delete_all_items(delete_all_resources, delete_all_origin_groups):
-    ...
-
-def test_ping_origin():
-    request = requests.get(url=ORIGIN_URL)
-    assert request.status_code == 200, 'Origin not available'
-
-def test_origin_group_created(delete_all_items, origin_group_id):
-    assert origin_group_id, 'Origin Group not created'
-
-@repeat_several_times_with_pause(times=3, pause=1)
-def test_resource_created(delete_all_items, resource):
-    assert resource is not None, 'CDN resource not created'
-
-@repeat_several_times_with_pause(times=5, pause=60)
-def test_ping_cdn(delete_all_items, resource):
-    request = requests.get(url=CDN_URL + '/ping/pong.txt')
-    assert request.status_code == 200, 'CDN resource not available'
+    return ok
 
 
+class TestCDN:
+    @classmethod
+    def setup_class(cls):
+
+        print('\n\n--- SETUP ---')
+
+        cls.cdn_cnames = [f'cdn-{i}.{ORIGIN_DOMAIN}' for i in range(3)]
+
+        cls.origin_groups_proc = OriginGroupsAPIProcessor(
+            entity_name=EntityName.ORIGIN_GROUP,
+            api_url=API_URL,
+            api_entity=APIEntity.ORIGIN_GROUP,
+            folder_id=FOLDER_ID,
+            token=token
+        )
+
+        cls.resources_proc = ResourcesAPIProcessor(
+            entity_name=EntityName.CDN_RESOURCE,
+            api_url=API_URL,
+            api_entity=APIEntity.CDN_RESOURCE,
+            folder_id=FOLDER_ID,
+            token=token
+        )
+
+        cls.origin = Origin(source=ORIGIN_DOMAIN, enabled=True)
+        cls.origin_group = OriginGroup(origins=[cls.origin, ], name='test-origin', folder_id=FOLDER_ID)
+        cls.resources = []
+
+        cls.resources_proc.delete_all_items()
+        # cls.origin_groups_proc.delete_all_items()  # it's better to be done but due to bug there is a problem at our cdn
+
+        # here we create origin group and cdn resources TODO make optionally - not to create but use already created and check that they are default
+        if not resources_are_not_alive(cls.cdn_cnames):
+            pytest.skip('Setup has failed')
+
+        print(f'Success: all resources have been 404 for {API_DELAY} seconds.')
+        print('Creating origin group and resources...', end='')
+        origin_group_id = cls.origin_groups_proc.create_item(item=cls.origin_group)
+
+        for cname in cls.cdn_cnames:
+            resource = cls.resources_proc.make_default_cdn_resource(
+                folder_id=FOLDER_ID,
+                cname=cname,
+                origin_group_id=origin_group_id
+            )
+            cls.resources_proc.create_item(resource)
+            cls.resources.append(resource)
+        print('done')
+
+        print('--- SETUP finished ---\n\nProcessing test-cases...')
+
+    @classmethod
+    def teardown_class(cls):
+        print('\n\n--- TEARDOWND ---')
+        print('Deleting items...', end='')
+        assert cls.resources_proc.delete_all_items(), 'Items have not been deleted'
+        assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'  # better to delete all but there is a bug =)
+        print('done')
+
+    def test_ping_origin(self):
+        request = requests.get(url=ORIGIN_FULL_URL)
+        assert request.status_code == 200, 'Origin not available'
+
+    def test_origin_group_created(self):
+        assert self.origin_group.id, 'Origin group not created'
+
+    def test_resource_created(self):
+        assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
+
+    @repeat_several_times_with_pause(times=5, pause=60)
+    def test_ping_cdn(self):
+        for cdn_cname in self.cdn_cnames:
+            try:
+                url = f'http://{cdn_cname}'
+                print(f'GET {url}...', end='')
+                request = requests.get(url)
+                assert request.status_code == 200, 'CDN resource not available'
+            except requests.exceptions.ConnectionError:
+                pytest.fail('CDN resource not available')
 

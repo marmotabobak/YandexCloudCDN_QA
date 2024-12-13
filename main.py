@@ -24,6 +24,7 @@ def main():
     #
     # authorization = Authorization(oauth=OAUTH, iam_token_url=IAM_TOKEN_URL)
     # token = authorization.get_token()
+    # print(token)
     #
     # resources_processor = ResourcesAPIProcessor(
     #     entity_name=EntityName.CDN_RESOURCE,
@@ -45,14 +46,28 @@ def main():
     #
     # origin = Origin(source='marmota-bobak.ru', enabled=True)
     # origin_group = OriginGroup(origins=[origin, ], name='test-origin', folder_id=FOLDER_ID)
-    # origin_group_id = origin_groups_processor.create_item(origin_group)
     #
+    # for i in range(10):
+    #     origin_group_id = origin_groups_processor.create_item(origin_group)
+    #     resource = resources_processor.make_default_cdn_resource(
+    #         folder_id=FOLDER_ID,
+    #         cname=f'cdnxxx{i}.marmota-bobak.ru',
+    #         origin_group_id=origin_group_id
+    #     )
+    #     resources_processor.create_item(resource)
+    #
+    #     resources_processor.delete_item_by_id(resource.id)
+    #     origin_groups_processor.delete_item_by_id(origin_group.id)
+
+
+
     # resources_processor.create_several_default_cdn_resources(
     #     cname_domain='marmota-bobak.ru',
     #     origin_group_id=origin_group_id,
     #     n=10
     # )
     ...
+
 
 if __name__ == '__main__':
     main()
