@@ -6,6 +6,7 @@ import os
 from typing import Callable, Any, List
 from functools import wraps
 from datetime import datetime, timedelta
+from enum import Enum
 
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
@@ -28,7 +29,12 @@ CDN_URL = 'http://cdn.marmota-bobak.ru'
 FOLDER_ID = os.environ['FOLDER_ID']  #TODO: get from cli args/config
 API_SLEEP = 5
 API_DELAY = 5 # should be 4 minutes (2*2) = 240 seconds
-CDN_RESOURCES = []
+
+class ResourcesInitializeType(Enum):
+    USE_EXISTING = 'use existing'
+    MAKE_NEW = 'make new'
+
+INITIALIZE_TYPE = ResourcesInitializeType.MAKE_NEW
 
 def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
     def decorator(func: Callable):
@@ -48,6 +54,7 @@ def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
         return wrapper
     return decorator
 
+# TODO: repeat 10 times with 30 seconds pause (in case resources were deleted but it hasn't affected yet)
 def resources_are_not_alive(cnames: List[str]) -> bool:
     sleep = 10
     attempt = 1
@@ -88,18 +95,8 @@ def resources_are_not_alive(cnames: List[str]) -> bool:
 class TestCDN:
     @classmethod
     def setup_class(cls):
-
-        print('\n\n--- SETUP ---')
-
+        cls.resources = []
         cls.cdn_cnames = [f'cdn-{i}.{ORIGIN_DOMAIN}' for i in range(3)]
-
-        cls.origin_groups_proc = OriginGroupsAPIProcessor(
-            entity_name=EntityName.ORIGIN_GROUP,
-            api_url=API_URL,
-            api_entity=APIEntity.ORIGIN_GROUP,
-            folder_id=FOLDER_ID,
-            token=token
-        )
 
         cls.resources_proc = ResourcesAPIProcessor(
             entity_name=EntityName.CDN_RESOURCE,
@@ -109,26 +106,42 @@ class TestCDN:
             token=token
         )
 
-        cls.origin = Origin(source=ORIGIN_DOMAIN, enabled=True)
-        cls.origin_group = OriginGroup(origins=[cls.origin, ], name='test-origin', folder_id=FOLDER_ID)
-
-        if CDN_RESOURCES:
-            cls.resources = CDN_RESOURCES
-            return
-        else:
-            cls.resources = []
-
-        origin_group_id = cls.origin_groups_proc.create_item(item=cls.origin_group)
-        # cls.origin_groups_proc.delete_all_items()  # it's better to be done but due to bug there is a problem at our cdn
-
-        print('Deleting, checking and creating default resources...')
-        cls.delete_check_create_default_resources()
-
+        print('\n\n--- SETUP ---')
+        cls.initialize_resources()
         print('--- SETUP finished ---\n\nProcessing test-cases...')
 
     @classmethod
+    def initialize_resources(cls) -> None:
+        if INITIALIZE_TYPE == ResourcesInitializeType.USE_EXISTING:
+            cls.initialize_resources_from_existing()
+        else:  # MAKE_NEW
+            cls.delete_check_create_default_resources()
+
+    @classmethod
+    def initialize_resources_from_existing(cls):
+        cls.resources = [
+            cls.resources_proc.make_default_cdn_resource(
+                folder_id=FOLDER_ID,
+                cname='cdn-01.' + ORIGIN_DOMAIN,
+                origin_group_id=cls.origin_group.id
+            )
+        ]
+
+    @classmethod
     def delete_check_create_default_resources(cls):
-        cls.resources_proc.delete_all_items()
+
+        cls.origin_groups_proc = OriginGroupsAPIProcessor(
+            entity_name=EntityName.ORIGIN_GROUP,
+            api_url=API_URL,
+            api_entity=APIEntity.ORIGIN_GROUP,
+            folder_id=FOLDER_ID,
+            token=token
+        )
+
+        cls.origin = Origin(source=ORIGIN_DOMAIN, enabled=True)
+        cls.origin_group = OriginGroup(origins=[cls.origin, ], name='test-origin', folder_id=FOLDER_ID)
+        cls.origin_groups_proc.create_item(item=cls.origin_group)
+
         if not resources_are_not_alive(cls.cdn_cnames):
             pytest.skip('Setup has failed')
 
@@ -145,10 +158,14 @@ class TestCDN:
 
     @classmethod
     def teardown_class(cls):
-        print('\n\n--- TEARDOWND ---')
-        print('Deleting items...', end='')
-        assert cls.resources_proc.delete_all_items(), 'Items have not been deleted'
-        assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'  # better to delete all but there is a bug =)
+        print('\n\n--- TEARDOWN ---')
+
+        if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
+            print('Deleting items...', end='')
+            assert cls.resources_proc.delete_all_items(), 'Items have not been deleted'
+            assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'
+            # assert cls.origin_groups_proc.delete_all_items()  # it's better to be done but due to bug there is a problem with ourcdn freezing resources and => origin groups
+
         print('done')
 
     def test_ping_origin(self):
@@ -161,6 +178,7 @@ class TestCDN:
     def test_resource_created(self):
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
+    # TODO: repeat more often - e.g. 10 times each 30 seconds or even more ofthen
     @repeat_several_times_with_pause(times=5, pause=60)
     def test_ping_cdn(self):
         for cdn_cname in self.cdn_cnames:
