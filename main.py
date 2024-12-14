@@ -14,17 +14,17 @@ logging.info('Starting service')
 
 
 def main():
-    # OAUTH = os.environ['OAUTH']
-    # IAM_TOKEN_URL = 'https://iam.api.cloud.yandex.net/iam/v1/tokens'
-    #
-    # API_URL = 'https://cdn.api.cloud.yandex.net/cdn/v1'
-    # ORIGIN_URL = 'http://marmota-bobak.ru'
-    # CDN_URL = 'http://cdn.marmota-bobak.ru'
-    # FOLDER_ID = 'b1gps72jhk932u5b63b3'
-    #
-    # authorization = Authorization(oauth=OAUTH, iam_token_url=IAM_TOKEN_URL)
-    # token = authorization.get_token()
-    # print(token)
+    OAUTH = os.environ['OAUTH']
+    IAM_TOKEN_URL = 'https://iam.api.cloud.yandex.net/iam/v1/tokens'
+
+    API_URL = 'https://cdn.api.cloud.yandex.net/cdn/v1'
+    ORIGIN_URL = 'http://marmota-bobak.ru'
+    CDN_URL = 'http://cdn.marmota-bobak.ru'
+    FOLDER_ID = 'b1gps72jhk932u5b63b3'
+
+    authorization = Authorization(oauth=OAUTH, iam_token_url=IAM_TOKEN_URL)
+    token = authorization.get_token()
+    print(token)
     #
     # resources_processor = ResourcesAPIProcessor(
     #     entity_name=EntityName.CDN_RESOURCE,

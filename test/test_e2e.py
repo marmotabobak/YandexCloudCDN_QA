@@ -34,7 +34,7 @@ class ResourcesInitializeType(Enum):
     USE_EXISTING = 'use existing'
     MAKE_NEW = 'make new'
 
-INITIALIZE_TYPE = ResourcesInitializeType.MAKE_NEW
+INITIALIZE_TYPE = ResourcesInitializeType.USE_EXISTING
 
 def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
     def decorator(func: Callable):
@@ -119,12 +119,17 @@ class TestCDN:
 
     @classmethod
     def initialize_resources_from_existing(cls):
+        resource_default = cls.resources_proc.make_default_cdn_resource(
+            folder_id=FOLDER_ID,
+            cname='cdn-0.' + ORIGIN_DOMAIN,
+            origin_group_id='7822618297624215564'
+        )
+        print('!!!', resource_default.cname)
+        resource_default.options.static_headers.value['foo'] = 'bar'
+        resource_default.id = 'cdnrobu25jvu5ltxyi32'
+
         cls.resources = [
-            cls.resources_proc.make_default_cdn_resource(
-                folder_id=FOLDER_ID,
-                cname='cdn-01.' + ORIGIN_DOMAIN,
-                origin_group_id=cls.origin_group.id
-            )
+            resource_default,
         ]
 
     @classmethod
@@ -162,9 +167,9 @@ class TestCDN:
 
         if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
             print('Deleting items...', end='')
+            # !!! TODO: delete only those resources that have been created
             assert cls.resources_proc.delete_all_items(), 'Items have not been deleted'
             assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'
-            # assert cls.origin_groups_proc.delete_all_items()  # it's better to be done but due to bug there is a problem with ourcdn freezing resources and => origin groups
 
         print('done')
 
@@ -173,7 +178,8 @@ class TestCDN:
         assert request.status_code == 200, 'Origin not available'
 
     def test_origin_group_created(self):
-        assert self.origin_group.id, 'Origin group not created'
+        if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
+            assert self.origin_group.id, 'Origin group not created'
 
     def test_resource_created(self):
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
@@ -181,9 +187,9 @@ class TestCDN:
     # TODO: repeat more often - e.g. 10 times each 30 seconds or even more ofthen
     @repeat_several_times_with_pause(times=5, pause=60)
     def test_ping_cdn(self):
-        for cdn_cname in self.cdn_cnames:
+        for resource in self.resources:
             try:
-                url = f'http://{cdn_cname}'
+                url = f'http://{resource.cname}'
                 print(f'GET {url}...', end='')
                 request = requests.get(url)
                 assert request.status_code == 200, 'CDN resource not available'
