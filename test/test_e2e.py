@@ -28,6 +28,7 @@ CDN_URL = 'http://cdn.marmota-bobak.ru'
 FOLDER_ID = os.environ['FOLDER_ID']  #TODO: get from cli args/config
 API_SLEEP = 5
 API_DELAY = 5 # should be 4 minutes (2*2) = 240 seconds
+CDN_RESOURCES = []
 
 def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
     def decorator(func: Callable):
@@ -66,7 +67,7 @@ def resources_are_not_alive(cnames: List[str]) -> bool:
                     print(f'false (status code {request.status_code})')
                     break
                 print('ok (status 404)')
-            except requests.exceptions.ConnectionError:  # DNS CNAME records should be created hence should be reachable TODO remake with DNS creation
+            except requests.exceptions.ConnectionError:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
                 ok = False
 
         if not ok:
@@ -83,7 +84,6 @@ def resources_are_not_alive(cnames: List[str]) -> bool:
             break
 
     return ok
-
 
 class TestCDN:
     @classmethod
@@ -111,30 +111,37 @@ class TestCDN:
 
         cls.origin = Origin(source=ORIGIN_DOMAIN, enabled=True)
         cls.origin_group = OriginGroup(origins=[cls.origin, ], name='test-origin', folder_id=FOLDER_ID)
-        cls.resources = []
 
-        cls.resources_proc.delete_all_items()
+        if CDN_RESOURCES:
+            cls.resources = CDN_RESOURCES
+            return
+        else:
+            cls.resources = []
+
+        origin_group_id = cls.origin_groups_proc.create_item(item=cls.origin_group)
         # cls.origin_groups_proc.delete_all_items()  # it's better to be done but due to bug there is a problem at our cdn
 
-        # here we create origin group and cdn resources TODO make optionally - not to create but use already created and check that they are default
+        print('Deleting, checking and creating default resources...')
+        cls.delete_check_create_default_resources()
+
+        print('--- SETUP finished ---\n\nProcessing test-cases...')
+
+    @classmethod
+    def delete_check_create_default_resources(cls):
+        cls.resources_proc.delete_all_items()
         if not resources_are_not_alive(cls.cdn_cnames):
             pytest.skip('Setup has failed')
 
         print(f'Success: all resources have been 404 for {API_DELAY} seconds.')
-        print('Creating origin group and resources...', end='')
-        origin_group_id = cls.origin_groups_proc.create_item(item=cls.origin_group)
 
         for cname in cls.cdn_cnames:
             resource = cls.resources_proc.make_default_cdn_resource(
                 folder_id=FOLDER_ID,
                 cname=cname,
-                origin_group_id=origin_group_id
+                origin_group_id=cls.origin_group.id
             )
             cls.resources_proc.create_item(resource)
             cls.resources.append(resource)
-        print('done')
-
-        print('--- SETUP finished ---\n\nProcessing test-cases...')
 
     @classmethod
     def teardown_class(cls):
