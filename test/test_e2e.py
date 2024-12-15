@@ -22,7 +22,7 @@ class ResourcesInitializeType(Enum):
     USE_EXISTING = 'use existing'
     MAKE_NEW = 'make new'
 
-INITIALIZE_TYPE = ResourcesInitializeType.MAKE_NEW
+INITIALIZE_TYPE = ResourcesInitializeType.USE_EXISTING
 
 OAUTH = os.environ['OAUTH']  #TODO: get from cli args/config
 IAM_TOKEN_URL = 'https://iam.api.cloud.yandex.net/iam/v1/tokens'
@@ -122,10 +122,6 @@ class TestCDN:
         cls.initialize_resources()
         logger.info('--- SETUP finished ---')
 
-    @classmethod
-    def test_setup(cls):
-        assert True
-
     @staticmethod
     def ping_origin() -> bool:
         request = requests.get(url=ORIGIN_FULL_URL)
@@ -140,16 +136,27 @@ class TestCDN:
 
     @classmethod
     def initialize_resources_from_existing(cls):
+        #TODO: make resources from yaml and then compare them with what really in Cloud are
         resource_default = cls.resources_proc.make_default_cdn_resource(
             folder_id=FOLDER_ID,
             cname='cdn-0.' + ORIGIN_DOMAIN,
-            origin_group_id='7822618297624215564'
+            origin_group_id='4073724215367012716'
         )
         resource_default.options.static_headers.value['foo'] = 'bar'
-        resource_default.id = 'cdnrfxp2jhbyommz5fjj'
+        resource_default.id = 'cdnralwd6t75hfgsflcr'
+        resource_inactive = cls.resources_proc.make_default_cdn_resource(
+            folder_id=FOLDER_ID,
+            cname='cdn-1.' + ORIGIN_DOMAIN,
+            origin_group_id='4073724215367012716'
+        )
+        resource_inactive.options.static_headers.value['foo'] = 'bar'
+        resource_inactive.id = 'cdnrvaulshazc2p7hwmi'
+        resource_inactive.active = False
+
 
         cls.resources = [
             resource_default,
+            resource_inactive
         ]
 
         if not cls.resources_are_created():
@@ -202,6 +209,11 @@ class TestCDN:
 
         logger.info('done')
 
+    # fake test-case to separate setup_class log output from first test-case
+    @classmethod
+    def test_setup(cls):
+        assert True
+
     def test_origin_group_created(self):
         if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
             assert self.origin_group.id, 'Origin group not created'
@@ -209,15 +221,21 @@ class TestCDN:
     def test_resource_created(self):
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
-    # TODO: repeat more often - e.g. 10 times each 30 seconds or even more ofthen
-    @repeat_several_times_with_pause(times=10, pause=30)
+    # TODO: repeat more often - e.g. 10 times each 30 seconds or even more often
+    @repeat_several_times_with_pause(times=1, pause=0)
     def test_ping_cdn(self):
         for resource in self.resources:
+            url = f'http://{resource.cname}'
+            logger.debug(f'GET {url}...')
             try:
-                url = f'http://{resource.cname}'
-                logger.debug(f'GET {url}...')
                 request = requests.get(url)
-                assert request.status_code == 200, 'CDN resource not available'
+                request_code = request.status_code
+                logger.debug('!!!' + str(request_code) + str(resource.active))
+                if resource.active:
+                    assert request_code == 200, f'CDN resource {request_code}, should be 200'
+                else:  # inactive
+                    assert request_code == 404, f'CDN resource {request_code}, should be 404'
             except requests.exceptions.ConnectionError:
                 pytest.fail('CDN resource not available')
+
 

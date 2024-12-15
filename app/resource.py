@@ -135,6 +135,7 @@ class ResourcesAPIProcessor(APIProcessor):
             cname=cname,
             origin_group_id=origin_group_id,
             origin_protocol='HTTP',
-            options=options
+            options=options,
+            active=True
         )
 
