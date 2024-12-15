@@ -26,13 +26,14 @@ def main():
     token = authorization.get_token()
     print(token)
     #
-    # resources_processor = ResourcesAPIProcessor(
-    #     entity_name=EntityName.CDN_RESOURCE,
-    #     api_url=API_URL,
-    #     api_entity=APIEntity.CDN_RESOURCE,
-    #     folder_id=FOLDER_ID,
-    #     token=token
-    # )
+    resources_processor = ResourcesAPIProcessor(
+        entity_name=EntityName.CDN_RESOURCE,
+        api_url=API_URL,
+        api_entity=APIEntity.CDN_RESOURCE,
+        folder_id=FOLDER_ID,
+        token=token
+    )
+    print(resources_processor.get_items_ids_list())
     # resources_processor.delete_all_items()
     #
     # origin_groups_processor = OriginGroupsAPIProcessor(

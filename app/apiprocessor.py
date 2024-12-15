@@ -105,9 +105,11 @@ class APIProcessor(BaseModel):
         logging.info(f'item [{item_id}] deleted successfully')
         return True
 
-    def delete_several_items_by_ids(self, items_ids_list: List[str]) -> None:
+    def delete_several_items_by_ids(self, items_ids_list: List[str]) -> bool:
         for item_id in items_ids_list:
-            self.delete_item_by_id(item_id=item_id)
+            if not self.delete_item_by_id(item_id=item_id):
+                return False
+        return True
 
     def delete_all_items(self) -> bool:
         res = True
