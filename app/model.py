@@ -32,7 +32,7 @@ class EnabledBoolValueBool(BaseModelWithAliases):
 
 class EnabledBoolValueDictStrStr(BaseModelWithAliases):
     enabled: bool
-    value: Dict[str, str]
+    value: Optional[Dict[str, str]] = Field(None)
 
 class EdgeCacheSettings(BaseModelWithAliases):
     enabled: bool
@@ -56,8 +56,8 @@ class HostOptions(BaseModelWithAliases):
     forward_host_header: Optional[EnabledBoolValueBool] = Field(None, alias='forwardHostHeader')
 
 class Cors(BaseModelWithAliases):
-    enabled: bool
-    value: List[str]
+    enabled: Optional[bool] = Field(None)
+    value: Optional[List[str]] = Field(None)
 
 class AllowedHttpMethods(BaseModelWithAliases):
     enabled: bool
@@ -65,7 +65,7 @@ class AllowedHttpMethods(BaseModelWithAliases):
 
 class Rewrite(BaseModelWithAliases):
     enabled: bool
-    body: str
+    body: Optional[str] = Field(None)
     flag: str
 
 class SecureKey(BaseModelWithAliases):
@@ -96,7 +96,7 @@ class CDNResourceOptions(BaseModelWithAliases):
     allowed_http_methods: Optional[AllowedHttpMethods] = Field(None, alias='allowedHttpMethods')
     proxy_cache_methods_set: Optional[EnabledBoolValueBool] = Field(None, alias='proxyCacheMethodsSet')
     disable_proxy_forceRanges: Optional[EnabledBoolValueBool] = Field(None, alias='disableProxyForceRanges')
-    static_request_headers: Optional[EnabledBool] = Field(None, alias='staticRequestHeaders')
+    static_request_headers: Optional[EnabledBoolValueDictStrStr] = Field(None, alias='staticRequestHeaders')
     custom_server_name: Optional[EnabledBool] = Field(None, alias='customServerName')
     ignore_cookie: Optional[EnabledBoolValueBool] = Field(None, alias='ignoreCookie')
     rewrite: Optional[Rewrite] = Field(None)

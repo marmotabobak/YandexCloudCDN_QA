@@ -30,15 +30,21 @@ authorization = Authorization(oauth=OAUTH, iam_token_url=IAM_TOKEN_URL)
 assert (token := authorization.get_token()), 'Error while getting token'
 
 #TODO: !!! dns cname needs to be created before tests
-
 API_URL = 'https://cdn.api.cloud.yandex.net/cdn/v1'
 ORIGIN_DOMAIN = 'marmota-bobak.ru'
 ORIGIN_FULL_URL = 'http://marmota-bobak.ru'
 RESOURCE_CNAME = 'cdn.marmota-bobak.ru'
 CDN_URL = 'http://cdn.marmota-bobak.ru'
-FOLDER_ID = os.environ['FOLDER_ID']  #TODO: get from cli args/config
+# FOLDER_ID = os.environ['FOLDER_ID']  #TODO: get from cli args/config
+FOLDER_ID = 'b1g0nv5cjfie2efe0dnm'
+ORIGIN_GROUP_ID = '194852979077665688'
 API_SLEEP = 5
 API_DELAY = 5 # should be 4 minutes (2*2) = 240 seconds
+EXISTING_RESOURCES_IDS = [
+    'cdnrevowkuszfkeblnfc', 'cdnreiln4kbk5uztr5rc', 'cdnrqxwudm2tdwzmsl4w',
+    # 'cdnrrcdn3q4fltujg7bq', 'cdnrbv6obmkkydjfkxkl','cdnrt4cp7nuni3yusj2i', 'cdnrjrpnthbe3um5wt5s',
+    # 'cdnrdntvcu6cisuovrzj', 'cdnr3qmdtk7igcn4ioti', 'cdnrtofltsfkvexeor73'
+]
 
 def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
     def decorator(func: Callable):
@@ -137,36 +143,34 @@ class TestCDN:
     @classmethod
     def initialize_resources_from_existing(cls):
         #TODO: make resources from yaml and then compare them with what really in Cloud are
-        resource_default = cls.resources_proc.make_default_cdn_resource(
-            folder_id=FOLDER_ID,
-            cname='cdn-0.' + ORIGIN_DOMAIN,
-            origin_group_id='4073724215367012716'
-        )
-        resource_default.options.static_headers.value['foo'] = 'bar'
-        resource_default.id = 'cdnralwd6t75hfgsflcr'
-        resource_inactive = cls.resources_proc.make_default_cdn_resource(
-            folder_id=FOLDER_ID,
-            cname='cdn-1.' + ORIGIN_DOMAIN,
-            origin_group_id='4073724215367012716'
-        )
-        resource_inactive.options.static_headers.value['foo'] = 'bar'
-        resource_inactive.id = 'cdnrvaulshazc2p7hwmi'
-        resource_inactive.active = False
 
+        i = 0
+        for resource_id in EXISTING_RESOURCES_IDS:
+            resource = cls.resources_proc.make_default_cdn_resource(
+                resource_id=resource_id,
+                folder_id=FOLDER_ID,
+                cname=f'cdn-{i}.{ORIGIN_DOMAIN}',
+                origin_group_id=ORIGIN_GROUP_ID,
+            )
+            cls.resources.append(resource)
+            i += 1
 
-        cls.resources = [
-            resource_default,
-            resource_inactive
-        ]
-
-        if not cls.resources_are_created():
-            pytest.fail('Resources have not been created')
+        if not cls.resources_are_equal():
+            pytest.fail('Resources are not equal')
 
     @classmethod
-    def resources_are_created(cls) -> bool:
-        if not (all_resources_ids := cls.resources_proc.get_items_ids_list()):
-            return False
-        return all(resource.id in all_resources_ids for resource in cls.resources)
+    def resources_are_equal(cls) -> bool:
+        for resource in cls.resources:
+            existing_resource = cls.resources_proc.get_item_by_id(resource.id)
+
+            resource_dict = resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'})
+            existing_resource_dict = existing_resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'})
+
+            if resource_dict != existing_resource_dict:
+                return False
+
+        return True
+
 
     @classmethod
     def make_new_resources(cls):
@@ -222,8 +226,8 @@ class TestCDN:
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
     # TODO: repeat more often - e.g. 10 times each 30 seconds or even more often
-    @repeat_several_times_with_pause(times=1, pause=0)
-    def test_ping_cdn(self):
+    @repeat_several_times_with_pause(times=10, pause=10)
+    def test_active_and_not_active_resources(self):
         for resource in self.resources:
             url = f'http://{resource.cname}'
             logger.debug(f'GET {url}...')

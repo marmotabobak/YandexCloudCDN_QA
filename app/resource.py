@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Iterator
 import requests
 from pydantic import BaseModel, ValidationError
 
-from app.model import CDNResource, SSLCertificate, CDNResourceOptions, EdgeCacheSettings, EnabledBoolValueDictStrStr, APIProcessorError
+from app.model import *
 from app.apiprocessor import APIProcessor
 from utils import make_random_8_symbols
 
@@ -122,20 +122,32 @@ class ResourcesAPIProcessor(APIProcessor):
             )
 
     @staticmethod
-    def make_default_cdn_resource(folder_id: str, cname: str, origin_group_id: str, ) -> CDNResource:
-        options = CDNResourceOptions(
-            edge_cache_settings=EdgeCacheSettings(enabled=True, default_value='10'),
-            static_headers=EnabledBoolValueDictStrStr(
-                enabled=True,
-                value={'foo': make_random_8_symbols()}
-            )
-        )
+    def make_default_cdn_resource(folder_id: str, cname: str, origin_group_id: str, resource_id: str=None) -> CDNResource:
         return CDNResource(
-            folder_id=folder_id,
-            cname=cname,
-            origin_group_id=origin_group_id,
-            origin_protocol='HTTP',
-            options=options,
-            active=True
+            active=True,
+            options=CDNResourceOptions(
+                edge_cache_settings=EdgeCacheSettings(enabled=True, default_value='10'),
+                browser_cache_settings=EnabledBool(enabled=False),
+                query_params_options=QueryParamsOptions(
+                    ignore_query_string=EnabledBoolValueBool(enabled=True, value=True)),
+                slice=EnabledBoolValueBool(enabled=True, value=False),
+                compression_options=CompressionOptions(gzip_on=EnabledBoolValueBool(enabled=True, value=True)),
+                static_headers=EnabledBoolValueDictStrStr(enabled=True, value={'fizz': 'buzz'}),
+                cors=Cors(enabled=False),
+                stale=EnabledBool(enabled=False),
+                allowed_http_methods=AllowedHttpMethods(enabled=True, value=['GET', 'HEAD', 'OPTIONS']),
+                proxy_cache_methods_set=EnabledBoolValueBool(enabled=True, value=False),
+                disable_proxy_forceRanges=EnabledBoolValueBool(enabled=True, value=True),
+                static_request_headers=EnabledBoolValueDictStrStr(enabled=True, value={'foo': 'bar'}),
+                custom_server_name=EnabledBool(enabled=False),
+                ignore_cookie=EnabledBoolValueBool(enabled=True, value=True),
+                secure_key=SecureKey(enabled=False, type='DISABLE_IP_SIGNING'),
+            ),
+            ssl_certificate = SSLCertificate(type='DONT_USE', status='READY'),
+            id = resource_id,
+            folder_id = folder_id,
+            cname = cname,
+            origin_group_id = origin_group_id,
+            origin_protocol = 'HTTP'
         )
 
