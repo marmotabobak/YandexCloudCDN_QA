@@ -42,8 +42,8 @@ API_SLEEP = 5
 API_DELAY = 5 # should be 4 minutes (2*2) = 240 seconds
 EXISTING_RESOURCES_IDS = [
     'cdnrevowkuszfkeblnfc', 'cdnreiln4kbk5uztr5rc', 'cdnrqxwudm2tdwzmsl4w',
-    # 'cdnrrcdn3q4fltujg7bq', 'cdnrbv6obmkkydjfkxkl','cdnrt4cp7nuni3yusj2i', 'cdnrjrpnthbe3um5wt5s',
-    # 'cdnrdntvcu6cisuovrzj', 'cdnr3qmdtk7igcn4ioti', 'cdnrtofltsfkvexeor73'
+    'cdnrrcdn3q4fltujg7bq', 'cdnrbv6obmkkydjfkxkl','cdnrt4cp7nuni3yusj2i', 'cdnrjrpnthbe3um5wt5s',
+    'cdnrdntvcu6cisuovrzj', 'cdnr3qmdtk7igcn4ioti', 'cdnrtofltsfkvexeor73'
 ]
 
 def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
