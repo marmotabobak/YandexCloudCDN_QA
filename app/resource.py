@@ -23,6 +23,7 @@ class ResourcesAPIProcessor(APIProcessor):
             logging.debug(f'cdn resource dict: {item_dict}')
             return None
 
+        # TODO: move to create method as it is used only there
         item_dict['origin'] = {'originGroupId': origin_group_id}
         del (item_dict['originGroupId'])
         return item_dict
@@ -75,7 +76,6 @@ class ResourcesAPIProcessor(APIProcessor):
         headers = {'Authorization': f'Bearer {self.token}'}
 
         payload = updated_resource.model_dump(exclude={'created_at', 'updated_at'}, by_alias=True)
-
         request = requests.patch(url=url, headers=headers, json=payload)
 
         response_status = request.status_code

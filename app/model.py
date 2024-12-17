@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import logging
 from datetime import datetime
 from typing import Optional, List, Dict
 from enum import Enum
@@ -103,6 +106,27 @@ class CDNResourceOptions(BaseModelWithAliases):
     secure_key: Optional[SecureKey] = Field(None, alias='secureKey')
     ip_address_acl: Optional[IpAddressAcl] = Field(None, alias='ipAddressAcl')
 
+    def __eq__(self, other: CDNResourceOptions) -> bool:
+
+        self_dict = self.model_dump()
+        other_dict = other.model_dump()
+
+        if (not self.rewrite or not self.rewrite.enabled) and (not other.rewrite or not other.rewrite.enabled):
+            del self_dict['rewrite']
+            del other_dict['rewrite']
+
+        for option_name, option_value in self_dict.items():
+            other_option_value = other_dict[option_name]
+            if option_value != other_option_value:
+                logging.debug(f'{option_name} is not equal: self=[{option_value}], other =[{other_option_value}]')
+                print(f'{option_name} is not equal: self=[{option_value}], other =[{other_option_value}]')
+                return False
+
+        return True
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 class CDNResource(BaseModelWithAliases):
     active: Optional[bool] = Field(None)
     options: Optional[CDNResourceOptions] = Field(None)
@@ -116,6 +140,17 @@ class CDNResource(BaseModelWithAliases):
     origin_group_id: str = Field(..., alias='originGroupId')
     origin_group_name: Optional[str] = Field(None, alias='originGroupName')
     origin_protocol: str = Field(..., alias='originProtocol')
+
+    def __eq__(self, other: CDNResource) -> bool:
+        if self.options != other.options:
+            print('!')
+            return False
+        self_dict = self.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name', 'options'})
+        other_dict = other.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name', 'options'})
+        return self_dict == other_dict
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 class OriginMetaCommon(BaseModelWithAliases):
     name: str

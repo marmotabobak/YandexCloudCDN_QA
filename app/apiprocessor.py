@@ -121,7 +121,6 @@ class APIProcessor(BaseModel):
             logging.info(f'trying to delete all [{self.api_entity.value}] items... none found to be deleted')
         return res
 
-    # for some subclasses only to redeclare
     def make_dict_from_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[dict]:
         try:
             return item.model_dump(exclude_none=True, by_alias=True)
@@ -179,3 +178,9 @@ class APIProcessor(BaseModel):
             logging.debug(f'request payload: {json.dumps(payload)}')
             logging.debug(f'response text: {request.text}')
             return None
+
+    def compare_item_to_existing(self, item: Union[CDNResource, OriginGroup]) -> bool:
+        existing_item = self.get_item_by_id(item.id)
+        return item == existing_item
+
+

@@ -9,7 +9,7 @@ from app.authorization import Authorization
 from app.resource import ResourcesAPIProcessor
 from app.origingroup import OriginGroupsAPIProcessor
 from app.apiprocessor import EntityName, APIEntity
-from app.model import OriginGroup, Origin, OriginMeta, OriginMetaCommon, IpAddressAcl
+from app.model import OriginGroup, Origin, OriginMeta, OriginMetaCommon, IpAddressAcl, CDNResource
 
 #TODO: get logging level from cli args
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
@@ -47,27 +47,28 @@ def main():
         cname=f'yccdn-qa-10.marmota-bobak.ru',
         origin_group_id=ORIGIN_GROUP_ID,
     )
+
+    r =  CDNResource(
+        active=True,
+        folder_id=FOLDER_ID,
+        cname='aaa.aaa.ry',
+        origin_group_id=ORIGIN_GROUP_ID,
+        origin_protocol='HTTP'
+    )
+
     # resource.options.ip_address_acl = IpAddressAcl(
-    #     enabled=True,
+    #     enabled=False,
     #     excepted_values=['0.0.0.0/32', ],
     #     policy_type='POLICY_TYPE_ALLOW'
     # )
 
     # resources_processor.update(resource)
 
-    resource_dict = resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'})
 
-    existing_resource = resources_processor.get_item_by_id(resource.id)
-
-    existing_resource_dict = existing_resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'})
-
-    if resource_dict != existing_resource_dict:
-        print('=( FAIL =(')
-        for k, v in resource_dict['options'].items():
-            if v != existing_resource_dict['options'][k]:
-                print(k, v, existing_resource_dict['options'][k])
-    else:
+    if resources_processor.compare_item_to_existing(resource):
         print('!!!OK!!!')
+    else:
+        print('=( FAIL =(')
 
 
 
