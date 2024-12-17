@@ -124,12 +124,11 @@ class APIProcessor(BaseModel):
     # for some subclasses only to redeclare
     def make_dict_from_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[dict]:
         try:
-            item_dict = item.model_dump(exclude_none=True, by_alias=True)
+            return item.model_dump(exclude_none=True, by_alias=True)
         except ValidationError as e:
             logging.error('pydantic validation error')
             logging.debug(f'error details: {e}')
             return None
-        return item_dict
 
     @repeat_and_sleep(times_to_repeat=5, sleep_duration=1)
     def create_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before

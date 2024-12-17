@@ -53,6 +53,8 @@ def main():
     #     policy_type='POLICY_TYPE_ALLOW'
     # )
 
+    # resources_processor.update(resource)
+
     resource_dict = resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'})
 
     existing_resource = resources_processor.get_item_by_id(resource.id)
@@ -60,9 +62,12 @@ def main():
     existing_resource_dict = existing_resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'})
 
     if resource_dict != existing_resource_dict:
+        print('=( FAIL =(')
         for k, v in resource_dict['options'].items():
             if v != existing_resource_dict['options'][k]:
                 print(k, v, existing_resource_dict['options'][k])
+    else:
+        print('!!!OK!!!')
 
 
 

@@ -13,7 +13,10 @@ from utils import make_random_8_symbols
 class ResourcesAPIProcessor(APIProcessor):
 
     def make_dict_from_item(self, item: CDNResource) -> Optional[dict]:
-        item_dict = super().make_dict_from_item(item)
+        if not (item_dict := super().make_dict_from_item(item)):
+            logging.error('error while transforming cdn resource to dict')
+            logging.debug(f'cdn resource: {item}')
+            return None
 
         if not (origin_group_id := item_dict.get('originGroupId')):
             logging.error('[originGroupId] attribute is absent at cdn resource dict')
@@ -67,15 +70,13 @@ class ResourcesAPIProcessor(APIProcessor):
         while True:
             yield f'{make_random_8_symbols()}.{cname_domain}'
 
-    def update(self, new_resource: CDNResource):
-        url = f'{self.api_url}/resources/'
+    def update(self, updated_resource: CDNResource):
+        url = f'{self.api_url}/resources/{updated_resource.id}'
         headers = {'Authorization': f'Bearer {self.token}'}
 
-        payload = new_resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'}, by_alias=True)
-        payload['origin'] = {'originGroupId': payload['originGroupId']}
-        del(payload['originGroupId'])
+        payload = updated_resource.model_dump(exclude={'created_at', 'updated_at'}, by_alias=True)
 
-        request = requests.post(url=url, headers=headers, json=payload)
+        request = requests.patch(url=url, headers=headers, json=payload)
 
         response_status = request.status_code
         if response_status == 200:
@@ -98,7 +99,8 @@ class ResourcesAPIProcessor(APIProcessor):
                     return cdn_resource_id
 
             except json.JSONDecodeError as e:
-                ...  # log
+                logging.error('JSONDecodeError')
+                logging.debug(f'error details: {e}')
                 return None
             except KeyError as e:
                 ...  # log
