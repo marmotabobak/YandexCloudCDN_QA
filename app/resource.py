@@ -12,15 +12,17 @@ from utils import make_random_8_symbols
 
 class ResourcesAPIProcessor(APIProcessor):
 
-    def preprocess_items_dict(self, item_dict: dict) -> Optional[dict]:
+    def make_dict_from_item(self, item: CDNResource) -> Optional[dict]:
+        item_dict = super().make_dict_from_item(item)
 
-        if origin_group_id := item_dict.get('originGroupId'):
-            item_dict['origin'] = {'originGroupId': origin_group_id}
-            return item_dict
-        else:
-            logging.error('[originGroupId] attribute is absent at cdn_resource object')
+        if not (origin_group_id := item_dict.get('originGroupId')):
+            logging.error('[originGroupId] attribute is absent at cdn resource dict')
             logging.debug(f'cdn resource dict: {item_dict}')
             return None
+
+        item_dict['origin'] = {'originGroupId': origin_group_id}
+        del (item_dict['originGroupId'])
+        return item_dict
 
     def create_several_default_cdn_resources(
             self,
@@ -65,17 +67,13 @@ class ResourcesAPIProcessor(APIProcessor):
         while True:
             yield f'{make_random_8_symbols()}.{cname_domain}'
 
-    def update_cdn_resource(self, new_cdn_resource: CDNResource):
+    def update(self, new_resource: CDNResource):
         url = f'{self.api_url}/resources/'
         headers = {'Authorization': f'Bearer {self.token}'}
-        payload = {
-            'folderId': new_cdn_resource.folder_id,
-            'cname': new_cdn_resource.cname,
-            'origin': {
-                'originGroupId': new_cdn_resource.origin_group_id
-            },
-            'originProtocol': new_cdn_resource.origin_protocol
-        }
+
+        payload = new_resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'}, by_alias=True)
+        payload['origin'] = {'originGroupId': payload['originGroupId']}
+        del(payload['originGroupId'])
 
         request = requests.post(url=url, headers=headers, json=payload)
 
@@ -95,7 +93,7 @@ class ResourcesAPIProcessor(APIProcessor):
                     return None
 
                 if 'metadata' in response_dict and (cdn_resource_id := response_dict['metadata'].get('resourceId')):
-                    logging.info(f'CDN Resource [{cdn_resource_id}] created successfully')
+                    logging.info(f'CDN Resource [{cdn_resource_id}] updated successfully')
                     logging.debug(response_dict)
                     return cdn_resource_id
 

@@ -122,22 +122,21 @@ class APIProcessor(BaseModel):
         return res
 
     # for some subclasses only to redeclare
-    def preprocess_items_dict(self, item_dict: dict) -> dict:
-        return item_dict
-
-    @repeat_and_sleep(times_to_repeat=5, sleep_duration=1)
-    def create_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before
-
+    def make_dict_from_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[dict]:
         try:
             item_dict = item.model_dump(exclude_none=True, by_alias=True)
         except ValidationError as e:
             logging.error('pydantic validation error')
             logging.debug(f'error details: {e}')
             return None
+        return item_dict
 
-        if not (payload := self.preprocess_items_dict(item_dict)):
+    @repeat_and_sleep(times_to_repeat=5, sleep_duration=1)
+    def create_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before
+
+        if not (payload := self.make_dict_from_item(item)):
             logging.error('error while parsing item to payload')
-            logging.debug(f'item dict: {item_dict}')
+            logging.debug(f'item dict: {item}')
             return None
 
         url = f'{self.api_url}/{self.api_entity.value}/'

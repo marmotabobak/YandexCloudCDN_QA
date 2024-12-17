@@ -36,15 +36,16 @@ ORIGIN_FULL_URL = 'http://marmota-bobak.ru'
 RESOURCE_CNAME = 'cdn.marmota-bobak.ru'
 CDN_URL = 'http://cdn.marmota-bobak.ru'
 # FOLDER_ID = os.environ['FOLDER_ID']  #TODO: get from cli args/config
-FOLDER_ID = 'b1g0nv5cjfie2efe0dnm'
-ORIGIN_GROUP_ID = '194852979077665688'
+FOLDER_ID = 'b1gjifkk80hojm6nv42n'
+ORIGIN_GROUP_ID = '5867945351699784427'
 API_SLEEP = 5
 API_DELAY = 5 # should be 4 minutes (2*2) = 240 seconds
 EXISTING_RESOURCES_IDS = [
-    'cdnrevowkuszfkeblnfc', 'cdnreiln4kbk5uztr5rc', 'cdnrqxwudm2tdwzmsl4w',
-    'cdnrrcdn3q4fltujg7bq', 'cdnrbv6obmkkydjfkxkl','cdnrt4cp7nuni3yusj2i', 'cdnrjrpnthbe3um5wt5s',
-    'cdnrdntvcu6cisuovrzj', 'cdnr3qmdtk7igcn4ioti', 'cdnrtofltsfkvexeor73'
+    'cdnroq3y4e74osnivr7e', 'cdnrcblizmcdlwnddrko', 'cdnrqvhjv4tyhbfwimw3', 'cdnr5t2qvpsnaaglie2c',
+    'cdnrpnabfdp7u6drjaua', 'cdnr7bbwrxhguo63wkpl', 'cdnrrausbqmlmhzq6ffp', 'cdnrfvuvfped42dkmyrv',
+    'cdnrcqdphowdoxyxrufs', 'cdnrxcdi4xlyuwp42xfl'
 ]
+
 
 def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
     def decorator(func: Callable):
@@ -155,11 +156,11 @@ class TestCDN:
             cls.resources.append(resource)
             i += 1
 
-        if not cls.resources_are_equal():
+        if not cls.resources_are_equal_to_existing():
             pytest.fail('Resources are not equal')
 
     @classmethod
-    def resources_are_equal(cls) -> bool:
+    def resources_are_equal_to_existing(cls) -> bool:
         for resource in cls.resources:
             existing_resource = cls.resources_proc.get_item_by_id(resource.id)
 
