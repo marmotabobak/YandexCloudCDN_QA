@@ -145,12 +145,15 @@ class CDNResource(BaseModelWithAliases):
     origin_group_name: Optional[str] = Field(None, alias='originGroupName')
     origin_protocol: str = Field(..., alias='originProtocol')
 
-    def __eq__(self, other: CDNResource) -> bool:
+    def __eq__(self, other: CDNResource, not_to_compare: set = None) -> bool:
+
+        not_to_compare = {'created_at', 'updated_at', 'origin_group_name', 'options'} if not_to_compare is None else {}
+
         if self.options != other.options:
-            print('!')
             return False
-        self_dict = self.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name', 'options'})
-        other_dict = other.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name', 'options'})
+
+        self_dict = self.model_dump(exclude=not_to_compare)
+        other_dict = other.model_dump(exclude=not_to_compare)
         return self_dict == other_dict
 
     def __ne__(self, other):

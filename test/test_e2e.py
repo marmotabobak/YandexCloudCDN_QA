@@ -11,7 +11,7 @@ from enum import Enum
 
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
-from app.model import OriginGroup, Origin
+from app.model import OriginGroup, Origin, IpAddressAcl
 from app.authorization import Authorization
 from app.model import EntityName, APIEntity
 
@@ -40,12 +40,18 @@ FOLDER_ID = 'b1gjifkk80hojm6nv42n'
 ORIGIN_GROUP_ID = '5867945351699784427'
 API_SLEEP = 5
 API_DELAY = 5 # should be 4 minutes (2*2) = 240 seconds
-EXISTING_RESOURCES_IDS = [
-    'cdnroq3y4e74osnivr7e', 'cdnrcblizmcdlwnddrko', 'cdnrqvhjv4tyhbfwimw3', 'cdnr5t2qvpsnaaglie2c',
-    'cdnrpnabfdp7u6drjaua', 'cdnr7bbwrxhguo63wkpl', 'cdnrrausbqmlmhzq6ffp', 'cdnrfvuvfped42dkmyrv',
-    'cdnrcqdphowdoxyxrufs', 'cdnrxcdi4xlyuwp42xfl'
-]
-
+EXISTING_RESOURCES_IDS = {
+    'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru',
+    'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru',
+    'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru',
+    'cdnr5t2qvpsnaaglie2c': 'yccdn-qa-4.marmota-bobak.ru',
+    'cdnrpnabfdp7u6drjaua': 'yccdn-qa-5.marmota-bobak.ru',
+    'cdnr7bbwrxhguo63wkpl': 'yccdn-qa-6.marmota-bobak.ru',
+    'cdnrrausbqmlmhzq6ffp': 'yccdn-qa-7.marmota-bobak.ru',
+    'cdnrfvuvfped42dkmyrv': 'yccdn-qa-8.marmota-bobak.ru',
+    'cdnrcqdphowdoxyxrufs': 'yccdn-qa-9.marmota-bobak.ru',
+    'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
+}
 
 def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
     def decorator(func: Callable):
@@ -111,7 +117,6 @@ class TestCDN:
     def setup_class(cls):
 
         cls.resources = []
-        cls.cdn_cnames = [f'cdn-{i}.{ORIGIN_DOMAIN}' for i in range(3)]
 
         cls.resources_proc = ResourcesAPIProcessor(
             entity_name=EntityName.CDN_RESOURCE,
@@ -145,16 +150,20 @@ class TestCDN:
     def initialize_resources_from_existing(cls):
         #TODO: make resources from yaml and then compare them with what really in Cloud are
 
-        i = 0
-        for resource_id in EXISTING_RESOURCES_IDS:
+        for resource_id, cname in EXISTING_RESOURCES_IDS.items():
             resource = cls.resources_proc.make_default_cdn_resource(
                 resource_id=resource_id,
                 folder_id=FOLDER_ID,
-                cname=f'cdn-{i}.{ORIGIN_DOMAIN}',
+                cname=cname,
                 origin_group_id=ORIGIN_GROUP_ID,
             )
             cls.resources.append(resource)
-            i += 1
+
+        cls.resources[9].options.ip_address_acl = IpAddressAcl(
+            enabled=True,
+            excepted_values=['0.0.0.0/32', ],
+            policy_type='POLICY_TYPE_ALLOW'
+        )
 
         if not cls.resources_are_equal_to_existing():
             pytest.fail('Resources are not equal')
@@ -162,14 +171,10 @@ class TestCDN:
     @classmethod
     def resources_are_equal_to_existing(cls) -> bool:
         for resource in cls.resources:
-            existing_resource = cls.resources_proc.get_item_by_id(resource.id)
-
-            resource_dict = resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'})
-            existing_resource_dict = existing_resource.model_dump(exclude={'created_at', 'updated_at', 'origin_group_name'})
-
-            if resource_dict != existing_resource_dict:
+            if not cls.resources_proc.compare_item_to_existing(resource):
+                logger.debug(f'resource with cname {resource.cname} is not same as existing')
+                print('!!!', resource.cname)
                 return False
-
         return True
 
 

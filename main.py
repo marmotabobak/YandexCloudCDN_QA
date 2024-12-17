@@ -49,13 +49,13 @@ def main():
     )
 
     resource.options.ip_address_acl = IpAddressAcl(
-        enabled=False,
+        enabled=True,
         excepted_values=['0.0.0.0/32', ],
         policy_type='POLICY_TYPE_ALLOW'
     )
 
-    resources_processor.update(resource)
-
+    # resources_processor.update(resource)
+    #
     if resources_processor.compare_item_to_existing(resource):
         print('!!!OK!!!')
     else:
