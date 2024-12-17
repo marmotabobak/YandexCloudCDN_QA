@@ -53,7 +53,7 @@ EXISTING_RESOURCES_IDS = {
     'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
 }
 
-def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
+def repeat_several_times_with_pause(times: int = 20, pause: int = 15):
     def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -65,13 +65,12 @@ def repeat_several_times_with_pause(times: int = 3, pause: int = 1):
                 except AssertionError:
                     logger.debug(f'...failed. Sleeping for {pause} seconds...')
                     time.sleep(pause)
-                    continue
             pytest.fail('All attempts failed.')
         return wrapper
     return decorator
 
 # TODO: repeat 10 times with 30 seconds pause (in case resources were deleted but it hasn't affected yet)
-@repeat_several_times_with_pause(times=10, pause=30)
+@repeat_several_times_with_pause
 def resources_are_not_alive(cnames: List[str]) -> bool:
     sleep = 10
     attempt = 1
@@ -232,7 +231,7 @@ class TestCDN:
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
     # TODO: repeat more often - e.g. 10 times each 30 seconds or even more often
-    @repeat_several_times_with_pause(times=10, pause=10)
+    @repeat_several_times_with_pause()
     def test_active_and_not_active_resources(self):
         for resource in self.resources:
             url = f'http://{resource.cname}'
@@ -240,11 +239,28 @@ class TestCDN:
             try:
                 request = requests.get(url)
                 request_code = request.status_code
-                logger.debug('!!!' + str(request_code) + str(resource.active))
                 if resource.active:
-                    assert request_code == 200, f'CDN resource {request_code}, should be 200'
+                    assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
                 else:  # inactive
                     assert request_code == 404, f'CDN resource {request_code}, should be 404'
+            except requests.exceptions.ConnectionError:
+                pytest.fail('CDN resource not available')
+
+    @repeat_several_times_with_pause()
+    def test_ipacl_not_allowed(self):
+        for resource in self.resources:
+            url = f'http://{resource.cname}'
+            logger.debug(f'GET {url}...')
+            try:
+                request = requests.get(url)
+                request_code = request.status_code
+                if resource.options.ip_address_acl and resource.options.ip_address_acl.enabled:
+                    if resource.options.ip_address_acl.policy_type == 'POLICY_TYPE_ALLOW':  # consider ip-address is NOT our else refactor
+                        assert request_code == 403, f'CDN resource {request_code}, should be 403'
+                    else:
+                        ...  #TODO: to add
+                else:  # should be allowed
+                    assert request_code != 403, f'CDN resource 403, should be not'
             except requests.exceptions.ConnectionError:
                 pytest.fail('CDN resource not available')
 
