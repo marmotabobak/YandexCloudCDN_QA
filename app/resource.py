@@ -71,7 +71,7 @@ class ResourcesAPIProcessor(APIProcessor):
         while True:
             yield f'{make_random_8_symbols()}.{cname_domain}'
 
-    def update(self, updated_resource: CDNResource):
+    def update(self, updated_resource: CDNResource) -> Optional[str]:
         url = f'{self.api_url}/resources/{updated_resource.id}'
         headers = {'Authorization': f'Bearer {self.token}'}
 

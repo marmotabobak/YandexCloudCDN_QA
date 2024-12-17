@@ -11,7 +11,7 @@ from enum import Enum
 
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
-from app.model import OriginGroup, Origin, IpAddressAcl
+from app.model import OriginGroup, Origin, IpAddressAcl, CDNResource
 from app.authorization import Authorization
 from app.model import EntityName, APIEntity
 
@@ -39,7 +39,7 @@ CDN_URL = 'http://cdn.marmota-bobak.ru'
 FOLDER_ID = 'b1gjifkk80hojm6nv42n'
 ORIGIN_GROUP_ID = '5867945351699784427'
 API_SLEEP = 5
-API_DELAY = 5 # should be 4 minutes (2*2) = 240 seconds
+API_DELAY = 5
 EXISTING_RESOURCES_IDS = {
     'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru',
     'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru',
@@ -53,32 +53,35 @@ EXISTING_RESOURCES_IDS = {
     'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
 }
 
-def repeat_several_times_with_pause(times: int = 20, pause: int = 15):
+def repeat_several_times_with_pause_until_success_ot_timeout(attempts: int = 20, attempt_delay: int = 15):
     def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            for i in range(times):
-                logger.debug(f'Attempt #{i + 1} of {times}...')
+            for i in range(attempts):
+                logger.debug(f'Attempt #{i + 1} of {attempts}...')
                 try:
                     res = func(*args, **kwargs)
                     return res
                 except AssertionError:
-                    logger.debug(f'...failed. Sleeping for {pause} seconds...')
-                    time.sleep(pause)
+                    logger.debug(f'...failed. Sleeping for {attempt_delay} seconds...')
+                    time.sleep(attempt_delay)
             pytest.fail('All attempts failed.')
         return wrapper
     return decorator
 
-# TODO: repeat 10 times with 30 seconds pause (in case resources were deleted but it hasn't affected yet)
-@repeat_several_times_with_pause
-def resources_are_not_alive(cnames: List[str]) -> bool:
-    sleep = 10
+@repeat_several_times_with_pause_until_success_ot_timeout()
+def resources_are_not_alive_for_period_of_time(
+        cnames: List[str],
+        duration_to_success: int = API_DELAY,
+        attempt_sleep: int = API_SLEEP
+) -> bool:
+
     attempt = 1
     res = True
     now = datetime.now()
-    finish_time = now + timedelta(seconds=API_DELAY)
+    finish_time = now + timedelta(seconds=duration_to_success)
 
-    logger.info(f'Checking resources availability for {API_DELAY} seconds...')
+    logger.info(f'Checking resources availability for {duration_to_success} seconds...')
     while True:
         logger.debug(f'Attempt #{attempt}')
         for cname in cnames:
@@ -86,25 +89,61 @@ def resources_are_not_alive(cnames: List[str]) -> bool:
                 logger.debug(f'GET {cname}...')
                 request = requests.get(url='http://' + cname)
                 if request.status_code != 404:  # TODO: think about this check
-                    logger.error('!!!1')
                     res = False
                     logger.info(f'false (status code {request.status_code})')
                     break
                 logger.debug('ok (status 404)')
             except requests.exceptions.ConnectionError:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
-                logger.error('!!!2')
                 res = False
 
         if not res:
-            logger.error('!!!3')
             break
 
         logger.debug(f'Intermediate success: all resources are 404.')
         if (now := datetime.now()) < finish_time:
             seconds_left = (finish_time-now).seconds
             logger.debug(f'{seconds_left} seconds left')
-            logger.debug(f'Sleeping for {sleep} seconds...')
-            time.sleep(sleep)
+            logger.debug(f'Sleeping for {attempt_sleep} seconds...')
+            time.sleep(attempt_sleep)
+            attempt += 1
+        else:
+            break
+
+    return res
+
+
+@repeat_several_times_with_pause_until_success_ot_timeout()
+def resources_are_equal_for_period_of_time(
+        resources_proc: ResourcesAPIProcessor,
+        resources: List[CDNResource],
+        duration_to_success: int = API_DELAY,
+        attempt_sleep: int = API_SLEEP
+) -> bool:
+    attempt = 1
+    res = True
+    now = datetime.now()
+    finish_time = now + timedelta(seconds=duration_to_success)
+
+    logger.info(f'Checking resources equality for {duration_to_success} seconds...')
+    while True:
+        logger.debug(f'Attempt #{attempt}')
+        for resource in resources:
+            logger.debug(f'Comparing resource [{resource.id}]...')
+            if not resources_proc.compare_item_to_existing(resource):
+                res = False
+                logger.info(f'false')
+                break
+            logger.debug('ok')
+
+        if not res:
+            break
+
+        logger.debug(f'Intermediate success: all resources are equal to existing ones')
+        if (now := datetime.now()) < finish_time:
+            seconds_left = (finish_time - now).seconds
+            logger.debug(f'{seconds_left} seconds left')
+            logger.debug(f'Sleeping for {attempt_sleep} seconds...')
+            time.sleep(attempt_sleep)
             attempt += 1
         else:
             break
@@ -116,6 +155,7 @@ class TestCDN:
     def setup_class(cls):
 
         cls.resources = []
+        cls.cdn_cnames = []  # for making new resources only
 
         cls.resources_proc = ResourcesAPIProcessor(
             entity_name=EntityName.CDN_RESOURCE,
@@ -158,24 +198,27 @@ class TestCDN:
             )
             cls.resources.append(resource)
 
+        if not resources_are_equal_for_period_of_time(cls.resources_proc, cls.resources):
+            pytest.fail('Existing resources are not equal to default')
+        logger.info(f'Success: all resources have been equal to default for {API_DELAY} seconds.')
+
         cls.resources[9].options.ip_address_acl = IpAddressAcl(
             enabled=True,
             excepted_values=['0.0.0.0/32', ],
             policy_type='POLICY_TYPE_ALLOW'
         )
+        cls.resources_proc.update(cls.resources[9])
 
         if not cls.resources_are_equal_to_existing():
-            pytest.fail('Resources are not equal')
+            pytest.fail('Updated resources are not equal to existing ones')
 
     @classmethod
     def resources_are_equal_to_existing(cls) -> bool:
         for resource in cls.resources:
             if not cls.resources_proc.compare_item_to_existing(resource):
                 logger.debug(f'resource with cname {resource.cname} is not same as existing')
-                print('!!!', resource.cname)
                 return False
         return True
-
 
     @classmethod
     def make_new_resources(cls):
@@ -192,7 +235,7 @@ class TestCDN:
         cls.origin_group = OriginGroup(origins=[cls.origin, ], name='test-origin', folder_id=FOLDER_ID)
         cls.origin_groups_proc.create_item(item=cls.origin_group)
 
-        if not resources_are_not_alive(cls.cdn_cnames):
+        if not resources_are_not_alive_for_period_of_time(cls.cdn_cnames):
             pytest.fail('Setup has failed')
 
         logger.info(f'Success: all resources have been 404 for {API_DELAY} seconds.')
@@ -215,6 +258,12 @@ class TestCDN:
             assert cls.resources_proc.delete_several_items_by_ids([resource.id for resource in cls.resources]), \
                 'Items have not been deleted'
             assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'
+        else:
+            logger.info('Resetting resource to default...')
+            cls.resources[9].options.ip_address_acl.enabled = False
+            for resource in cls.resources:
+                cls.resources_proc.update(resource)
+            assert cls.resources_are_equal_to_existing(), 'Resources were not reset'
 
         logger.info('done')
 
@@ -231,7 +280,7 @@ class TestCDN:
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
     # TODO: repeat more often - e.g. 10 times each 30 seconds or even more often
-    @repeat_several_times_with_pause()
+    @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_active_and_not_active_resources(self):
         for resource in self.resources:
             url = f'http://{resource.cname}'
@@ -246,7 +295,7 @@ class TestCDN:
             except requests.exceptions.ConnectionError:
                 pytest.fail('CDN resource not available')
 
-    @repeat_several_times_with_pause()
+    @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_ipacl_not_allowed(self):
         for resource in self.resources:
             url = f'http://{resource.cname}'
