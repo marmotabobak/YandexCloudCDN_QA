@@ -48,22 +48,13 @@ def main():
         origin_group_id=ORIGIN_GROUP_ID,
     )
 
-    r =  CDNResource(
-        active=True,
-        folder_id=FOLDER_ID,
-        cname='aaa.aaa.ry',
-        origin_group_id=ORIGIN_GROUP_ID,
-        origin_protocol='HTTP'
+    resource.options.ip_address_acl = IpAddressAcl(
+        enabled=False,
+        excepted_values=['0.0.0.0/32', ],
+        policy_type='POLICY_TYPE_ALLOW'
     )
 
-    # resource.options.ip_address_acl = IpAddressAcl(
-    #     enabled=False,
-    #     excepted_values=['0.0.0.0/32', ],
-    #     policy_type='POLICY_TYPE_ALLOW'
-    # )
-
-    # resources_processor.update(resource)
-
+    resources_processor.update(resource)
 
     if resources_processor.compare_item_to_existing(resource):
         print('!!!OK!!!')

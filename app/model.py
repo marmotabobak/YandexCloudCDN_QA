@@ -111,6 +111,10 @@ class CDNResourceOptions(BaseModelWithAliases):
         self_dict = self.model_dump()
         other_dict = other.model_dump()
 
+        if (not self.ip_address_acl or not self.ip_address_acl.enabled) and (not other.ip_address_acl or not other.ip_address_acl.enabled):
+            del self_dict['ip_address_acl']
+            del other_dict['ip_address_acl']
+
         if (not self.rewrite or not self.rewrite.enabled) and (not other.rewrite or not other.rewrite.enabled):
             del self_dict['rewrite']
             del other_dict['rewrite']
@@ -166,6 +170,7 @@ class Origin(BaseModelWithAliases):
     backup: Optional[bool] = Field(None)
     meta: Optional[OriginMeta] = Field(None)
 
+# TODO: make origins and oeigin groups comparable (__eq()__ and __ne()__)
 class OriginGroup(BaseModelWithAliases):
     use_next: Optional[bool] = Field(None, alias='useNext')
     origins: List[Origin]
