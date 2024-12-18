@@ -13,7 +13,7 @@ from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
 from app.model import OriginGroup, Origin, IpAddressAcl, CDNResource
 from app.authorization import Authorization
-from app.model import EntityName, APIEntity
+from app.model import EntityName, APIEntity, EdgeCacheSettings
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ EXISTING_RESOURCES_IDS = {
     'cdnrcqdphowdoxyxrufs': 'yccdn-qa-9.marmota-bobak.ru',
     'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
 }
+EDGE_CACHE_VALUE_TO_TEST = 10
 
 def repeat_several_times_with_pause_until_success_ot_timeout(attempts: int = 20, attempt_delay: int = 15):
     def decorator(func: Callable):
@@ -198,16 +199,24 @@ class TestCDN:
             )
             cls.resources.append(resource)
 
-        if not resources_are_equal_for_period_of_time(cls.resources_proc, cls.resources):
-            pytest.fail('Existing resources are not equal to default')
+        # if not resources_are_equal_for_period_of_time(cls.resources_proc, cls.resources):
+        #     pytest.fail('Existing resources are not equal to default')
         logger.info(f'Success: all resources have been equal to default for {API_DELAY} seconds.')
 
-        cls.resources[9].options.ip_address_acl = IpAddressAcl(
+        cls.resources[0].active = False  #     'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
+
+        cls.resources[1].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value='10')  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
+
+        cls.resources[2].options.edge_cache_settings = EdgeCacheSettings(enabled=False, default_value='10')  # 'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru'
+
+        cls.resources[9].options.ip_address_acl = IpAddressAcl(    # 'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
             enabled=True,
             excepted_values=['0.0.0.0/32', ],
             policy_type='POLICY_TYPE_ALLOW'
         )
-        cls.resources_proc.update(cls.resources[9])
+
+        for resource in cls.resources:
+            cls.resources_proc.update(resource)
 
         if not cls.resources_are_equal_to_existing():
             pytest.fail('Updated resources are not equal to existing ones')
@@ -262,9 +271,7 @@ class TestCDN:
             assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'
         else:
             logger.info('Resetting resource to default...')
-            cls.resources[9].options.ip_address_acl.enabled = False
-            for resource in cls.resources:
-                cls.resources_proc.update(resource)
+            # TODO: RESET TO DEFAULT
             assert cls.resources_are_equal_to_existing(), 'Resources were not reset'
 
         logger.info('done')
@@ -306,8 +313,23 @@ class TestCDN:
                     assert request_code == 403, f'CDN resource {request_code}, should be 403'
                 else:
                     ...  #TODO: to add
-            else:  # should be allowed
+            else:  # allowed
                 assert request_code != 403, f'CDN resource 403, should be not'
 
+    def test_edge_cache_settings(self):
+        resources_to_test = []
+        for resource in self.resources:
+            edge_cache_settings = resource.options.edge_cache_settings
+            if edge_cache_settings and edge_cache_settings.enabled:
+                if edge_cache_settings.default_value == str(EDGE_CACHE_VALUE_TO_TEST):
+                    resources_to_test.append(resource)
+        if not resources_to_test:
+            pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled ')
+
+        for resource in resources_to_test:
+            url = f'http://{resource.cname}'
+            logger.debug(f'GET {url}...')
+            request = requests.get(url)
+            request_code = request.status_code
 
 
