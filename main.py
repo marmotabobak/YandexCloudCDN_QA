@@ -31,7 +31,7 @@ def main():
 
     authorization = Authorization(oauth=OAUTH, iam_token_url=IAM_TOKEN_URL)
     token = authorization.get_token()
-    # print(token)
+    print(token)
 
     resources_processor = ResourcesAPIProcessor(
         entity_name=EntityName.CDN_RESOURCE,
@@ -49,10 +49,12 @@ def main():
     )
 
     resource.options.ip_address_acl = IpAddressAcl(
-        enabled=True,
+        enabled=False,
         excepted_values=['0.0.0.0/32', ],
         policy_type='POLICY_TYPE_ALLOW'
     )
+    resource.options.edge_cache_settings.enabled = False
+
 
     # resources_processor.update(resource)
     #

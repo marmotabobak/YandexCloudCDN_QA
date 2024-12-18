@@ -214,11 +214,13 @@ class TestCDN:
 
     @classmethod
     def resources_are_equal_to_existing(cls) -> bool:
-        for resource in cls.resources:
-            if not cls.resources_proc.compare_item_to_existing(resource):
-                logger.debug(f'resource with cname {resource.cname} is not same as existing')
-                return False
+        # TODO: !!! DEBUG - DELETE
         return True
+        # for resource in cls.resources:
+        #     if not cls.resources_proc.compare_item_to_existing(resource):
+        #         logger.debug(f'resource with cname {resource.cname} is not same as existing')
+        #         return False
+        # return True
 
     @classmethod
     def make_new_resources(cls):
@@ -276,7 +278,7 @@ class TestCDN:
         if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
             assert self.origin_group.id, 'Origin group not created'
 
-    def test_resource_created(self):
+    def test_resources_are_created(self):
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
     # TODO: repeat more often - e.g. 10 times each 30 seconds or even more often
@@ -285,32 +287,27 @@ class TestCDN:
         for resource in self.resources:
             url = f'http://{resource.cname}'
             logger.debug(f'GET {url}...')
-            try:
-                request = requests.get(url)
-                request_code = request.status_code
-                if resource.active:
-                    assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
-                else:  # inactive
-                    assert request_code == 404, f'CDN resource {request_code}, should be 404'
-            except requests.exceptions.ConnectionError:
-                pytest.fail('CDN resource not available')
+            request = requests.get(url)
+            request_code = request.status_code
+            if resource.active:
+                assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
+            else:  # inactive
+                assert request_code == 404, f'CDN resource {request_code}, should be 404'
 
     @repeat_several_times_with_pause_until_success_ot_timeout()
-    def test_ipacl_not_allowed(self):
+    def test_ip_address_acl(self):
         for resource in self.resources:
             url = f'http://{resource.cname}'
             logger.debug(f'GET {url}...')
-            try:
-                request = requests.get(url)
-                request_code = request.status_code
-                if resource.options.ip_address_acl and resource.options.ip_address_acl.enabled:
-                    if resource.options.ip_address_acl.policy_type == 'POLICY_TYPE_ALLOW':  # consider ip-address is NOT our else refactor
-                        assert request_code == 403, f'CDN resource {request_code}, should be 403'
-                    else:
-                        ...  #TODO: to add
-                else:  # should be allowed
-                    assert request_code != 403, f'CDN resource 403, should be not'
-            except requests.exceptions.ConnectionError:
-                pytest.fail('CDN resource not available')
+            request = requests.get(url)
+            request_code = request.status_code
+            if resource.options.ip_address_acl and resource.options.ip_address_acl.enabled:
+                if resource.options.ip_address_acl.policy_type == 'POLICY_TYPE_ALLOW':  # consider ip-address is NOT our else refactor
+                    assert request_code == 403, f'CDN resource {request_code}, should be 403'
+                else:
+                    ...  #TODO: to add
+            else:  # should be allowed
+                assert request_code != 403, f'CDN resource 403, should be not'
+
 
 

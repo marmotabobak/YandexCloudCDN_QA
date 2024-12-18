@@ -111,18 +111,27 @@ class CDNResourceOptions(BaseModelWithAliases):
         self_dict = self.model_dump()
         other_dict = other.model_dump()
 
+        if (not self.edge_cache_settings or not self.edge_cache_settings.enabled) and (not other.edge_cache_settings or not other.edge_cache_settings.enabled):
+            self_dict.pop('edge_cache_settings', None)
+            other_dict.pop('edge_cache_settings', None)
+
         if (not self.ip_address_acl or not self.ip_address_acl.enabled) and (not other.ip_address_acl or not other.ip_address_acl.enabled):
-            del self_dict['ip_address_acl']
-            del other_dict['ip_address_acl']
+            self_dict.pop('ip_address_acl', None)
+            other_dict.pop('ip_address_acl', None)
 
         if (not self.rewrite or not self.rewrite.enabled) and (not other.rewrite or not other.rewrite.enabled):
-            del self_dict['rewrite']
-            del other_dict['rewrite']
+            self_dict.pop('rewrite', None)
+            other_dict.pop('rewrite', None)
+
+        if (not self.ip_address_acl or not self.ip_address_acl.enabled) and (not other.ip_address_acl or not other.ip_address_acl.enabled):
+            self_dict.pop('ip_address_acl', None)
+            other_dict.pop('ip_address_acl', None)
 
         for option_name, option_value in self_dict.items():
             other_option_value = other_dict[option_name]
             if option_value != other_option_value:
                 logging.debug(f'{option_name} is not equal: self=[{option_value}], other =[{other_option_value}]')
+                # TODO: DEBUG - delete
                 print(f'{option_name} is not equal: self=[{option_value}], other =[{other_option_value}]')
                 return False
 
