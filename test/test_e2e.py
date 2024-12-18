@@ -15,7 +15,7 @@ from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
 from app.model import OriginGroup, Origin, IpAddressAcl, CDNResource
 from app.authorization import Authorization
-from app.model import EntityName, APIEntity, EdgeCacheSettings
+from app.model import EntityName, APIEntity, EdgeCacheSettings, QueryParamsOptions, EnabledBoolValueBool
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -223,6 +223,10 @@ class TestCDN:
 
         cls.resources[2].options.edge_cache_settings = EdgeCacheSettings(enabled=False, default_value='10')  # 'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru'
 
+        cls.resources[3].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=True))  # 'cdnr5t2qvpsnaaglie2c': 'yccdn-qa-4.marmota-bobak.ru'
+
+        cls.resources[4].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=False))  # 'cdnrpnabfdp7u6drjaua': 'yccdn-qa-5.marmota-bobak.ru'
+
         cls.resources[9].options.ip_address_acl = IpAddressAcl(    # 'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
             enabled=True,
             excepted_values=['0.0.0.0/32', ],
@@ -239,7 +243,8 @@ class TestCDN:
     def resources_are_equal_to_existing(cls) -> bool:
         for resource in cls.resources:
             if not cls.resources_proc.compare_item_to_existing(resource):
-                logger.debug(f'Resource with cname {resource.cname} is not same as existing')
+                logger.debug(f'Resource [{resource.id}] with cname {resource.cname} is not same as existing')
+                logger.debug(f'Processor resource: {resource}')
                 return False
         return True
 
@@ -412,3 +417,55 @@ class TestCDN:
             request = requests.get(url)
             request_headers = EdgeResponseHeaders(**request.headers)
             assert not request_headers.cache_status
+
+    def test_ignore_query_string(self):
+        resources_to_test = []
+        for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
+
+            conditions_not_to_test = any(
+                (
+                    not resource.active,
+                    not resource.options,
+                    resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
+                    not resource.options.edge_cache_settings,
+                    not resource.options.edge_cache_settings.enabled,
+                    not resource.options.query_params_options,
+                    not resource.options.query_params_options.ignore_query_string,
+                    not resource.options.query_params_options.ignore_query_string.enabled,
+                    not resource.options.query_params_options.ignore_query_string.value,
+                )
+            )
+            if conditions_not_to_test:
+                continue
+            resources_to_test.append(resource)
+
+        if not resources_to_test:
+            pytest.fail(f'No resources found to test disabled edge_cache_settings')
+
+        logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
+
+    def test_do_not_ignore_query_string(self):
+        resources_to_test = []
+        for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
+
+            conditions_not_to_test = any(
+                (
+                    not resource.active,
+                    not resource.options,
+                    resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
+                    not resource.options.edge_cache_settings,
+                    not resource.options.edge_cache_settings.enabled,
+                    not resource.options.query_params_options,
+                    not resource.options.query_params_options.ignore_query_string,
+                    resource.options.query_params_options.ignore_query_string.value,
+                )
+            )
+            if conditions_not_to_test:
+                continue
+            resources_to_test.append(resource)
+
+        if not resources_to_test:
+            pytest.fail(f'No resources found to test disabled edge_cache_settings')
+
+        logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
+
