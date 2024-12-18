@@ -282,7 +282,7 @@ class TestCDN:
                 'Items have not been deleted'
             assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'
         else:
-            logger.info('Resetting resource to default...')
+            logger.info('Resetting resources to default...')
             # TODO: RESET TO DEFAULT
             assert cls.resources_are_equal_to_existing(), 'Resources were not reset'
 
@@ -318,7 +318,7 @@ class TestCDN:
     def test_ip_address_acl(self):
         for resource in self.resources:
             url = f'http://{resource.cname}'
-            logger.debug(f'GET {url}...')
+            logger.info(f'GET {url}...')
             request = requests.get(url)
             request_code = request.status_code
             if resource.options.ip_address_acl and resource.options.ip_address_acl.enabled:
@@ -332,7 +332,7 @@ class TestCDN:
     @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_edge_cache_settings(self):
-        resources_to_test = [self.resources[1]]  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
+        resources_to_test = []
         for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
 
             conditions_not_to_test = any(
@@ -355,12 +355,13 @@ class TestCDN:
         start_time = time.time()
         resources_statuses = {}
 
-        while time.time() < start_time + EDGE_CACHE_PERIODS_TO_TEST * EDGE_CACHE_VALUE_TO_TEST:
+        time_to_test = EDGE_CACHE_PERIODS_TO_TEST * EDGE_CACHE_VALUE_TO_TEST
+        logger.info(f'GET resources for {time_to_test} seconds...')
+        while time.time() < start_time + time_to_test:
             for resource in resources_to_test:
                 url = f'http://{resource.cname}'
                 request = requests.get(url)
                 request_headers = EdgeResponseHeaders(**request.headers)
-
                 host_response = HostResponse(time=time.time(), status=request_headers.cache_status)
                 resources_statuses.setdefault(
                     resource.id,
