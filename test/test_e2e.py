@@ -4,10 +4,12 @@ import time
 import pytest
 import requests
 import os
-from typing import Callable, Any, List
+from typing import Callable, Any, List, Optional
 from functools import wraps
 from datetime import datetime, timedelta
 from enum import Enum
+from collections import namedtuple
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
@@ -17,6 +19,16 @@ from app.model import EntityName, APIEntity, EdgeCacheSettings
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger(__name__)
+
+
+class EdgeResponseHeaders(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    cache_host: str = Field(..., alias='Cache-Host')
+    cache_status: str = Field(..., alias='Cache-Status')
+    fizz: Optional[str] = Field(None)
+
+HostResponse = namedtuple('HostResponse', 'time, status')
 
 class ResourcesInitializeType(Enum):
     USE_EXISTING = 'use existing'
@@ -53,6 +65,7 @@ EXISTING_RESOURCES_IDS = {
     'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
 }
 EDGE_CACHE_VALUE_TO_TEST = 10
+EDGE_CACHE_PERIODS_TO_TEST = 2
 
 def repeat_several_times_with_pause_until_success_ot_timeout(attempts: int = 20, attempt_delay: int = 15):
     def decorator(func: Callable):
@@ -199,6 +212,7 @@ class TestCDN:
             )
             cls.resources.append(resource)
 
+        # TODO: DEBUG COMMENT - UNCOMMENT FOR PRODUCTION
         # if not resources_are_equal_for_period_of_time(cls.resources_proc, cls.resources):
         #     pytest.fail('Existing resources are not equal to default')
         logger.info(f'Success: all resources have been equal to default for {API_DELAY} seconds.')
@@ -223,13 +237,11 @@ class TestCDN:
 
     @classmethod
     def resources_are_equal_to_existing(cls) -> bool:
-        # TODO: !!! DEBUG - DELETE
+        for resource in cls.resources:
+            if not cls.resources_proc.compare_item_to_existing(resource):
+                logger.debug(f'resource with cname {resource.cname} is not same as existing')
+                return False
         return True
-        # for resource in cls.resources:
-        #     if not cls.resources_proc.compare_item_to_existing(resource):
-        #         logger.debug(f'resource with cname {resource.cname} is not same as existing')
-        #         return False
-        # return True
 
     @classmethod
     def make_new_resources(cls):
@@ -288,7 +300,7 @@ class TestCDN:
     def test_resources_are_created(self):
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
-    # TODO: repeat more often - e.g. 10 times each 30 seconds or even more often
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_active_and_not_active_resources(self):
         for resource in self.resources:
@@ -301,6 +313,7 @@ class TestCDN:
             else:  # inactive
                 assert request_code == 404, f'CDN resource {request_code}, should be 404'
 
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_ip_address_acl(self):
         for resource in self.resources:
@@ -316,20 +329,52 @@ class TestCDN:
             else:  # allowed
                 assert request_code != 403, f'CDN resource 403, should be not'
 
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_edge_cache_settings(self):
-        resources_to_test = []
-        for resource in self.resources:
-            edge_cache_settings = resource.options.edge_cache_settings
-            if edge_cache_settings and edge_cache_settings.enabled:
-                if edge_cache_settings.default_value == str(EDGE_CACHE_VALUE_TO_TEST):
-                    resources_to_test.append(resource)
+        resources_to_test = [self.resources[1]]  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
+        for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
+
+            conditions_not_to_test = any(
+                (
+                    not resource.active,
+                    not resource.options,
+                    resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
+                    not resource.options.edge_cache_settings,
+                    not resource.options.edge_cache_settings.enabled,
+                    resource.options.edge_cache_settings.default_value != str(EDGE_CACHE_VALUE_TO_TEST)
+                )
+            )
+            if conditions_not_to_test:
+                continue
+            resources_to_test.append(resource)
+
         if not resources_to_test:
             pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled ')
 
-        for resource in resources_to_test:
-            url = f'http://{resource.cname}'
-            logger.debug(f'GET {url}...')
-            request = requests.get(url)
-            request_code = request.status_code
+        start_time = time.time()
+        resources_statuses = {}
 
+        while time.time() < start_time + EDGE_CACHE_PERIODS_TO_TEST * EDGE_CACHE_VALUE_TO_TEST:
+            for resource in resources_to_test:
+                url = f'http://{resource.cname}'
+                request = requests.get(url)
+                request_headers = EdgeResponseHeaders(**request.headers)
 
+                host_response = HostResponse(time=time.time(), status=request_headers.cache_status)
+                resources_statuses.setdefault(
+                    resource.id,
+                    {request_headers.cache_host: []}
+                ).setdefault(request_headers.cache_host, []).append(host_response)
+
+            time.sleep(0.1)
+
+        for resource_id, resource_statuses in resources_statuses.items():
+            for host_name, host_responses in resource_statuses.items():
+                last_revalidated_or_miss = None
+                for host_response in host_responses:
+                    if host_response.status in ('REVALIDATED', 'MISS'):
+                        if last_revalidated_or_miss:
+                            # TODO: Check no the time of response received but respone prepared by host? (Header 'Date:...')
+                            assert host_response.time - last_revalidated_or_miss > 0.9 * EDGE_CACHE_VALUE_TO_TEST  # 0.9 to be sure
+                        last_revalidated_or_miss = host_response.time
