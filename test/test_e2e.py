@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from collections import namedtuple
 from pydantic import BaseModel, ConfigDict, Field
+from utils import ping, http_get_request_through_ip_address
 
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
@@ -66,6 +67,18 @@ EXISTING_RESOURCES_IDS = {
 }
 EDGE_CACHE_VALUE_TO_TEST = 10
 EDGE_CACHE_PERIODS_TO_TEST = 2
+EDGE_CACHE_HOSTS = {
+    'm9-srv01.yccdn.cloud.yandex.net': '188.72.104.2',
+    'm9-srv02.yccdn.cloud.yandex.net': '188.72.104.3',
+    'm9-srv03.yccdn.cloud.yandex.net': '188.72.104.4',
+    'm9-srv04.yccdn.cloud.yandex.net': '188.72.104.5',
+    'm9-srv05.yccdn.cloud.yandex.net': '188.72.104.6',
+    'mar-srv01.yccdn.cloud.yandex.net': '188.72.105.2',
+    'mar-srv02.yccdn.cloud.yandex.net': '188.72.105.3',
+    'mar-srv03.yccdn.cloud.yandex.net': '188.72.105.4',
+    'mar-srv04.yccdn.cloud.yandex.net': '188.72.105.5',
+    'mar-srv05.yccdn.cloud.yandex.net': '188.72.105.6',
+}
 
 def repeat_several_times_with_pause_until_success_ot_timeout(attempts: int = 20, attempt_delay: int = 15):
     def decorator(func: Callable):
@@ -299,11 +312,11 @@ class TestCDN:
         assert True
 
     @staticmethod
-    def ping_resources_within_period_of_time(
+    def http_get_request_resources_within_period_of_time(
             resources: List[CDNResource],
             period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
             periods_count: int = EDGE_CACHE_PERIODS_TO_TEST
-    ) -> Dict[str, Dict[str, List[str]]]:
+    ) -> Dict[str, Dict[str, List[HostResponse]]]:
         start_time = time.time()
         resources_statuses = {}
 
@@ -331,7 +344,7 @@ class TestCDN:
     # TODO: Refactor with reaching specific edge caches
     @staticmethod
     def resources_are_correctly_processed_by_edge_caches(
-            resources_statuses: Dict[str, Dict[str, List[str]]],
+            resources_statuses: Dict[str, Dict[str, List[HostResponse]]],
             period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
             error_rate: float = 0.9
     ) -> bool:
@@ -358,6 +371,11 @@ class TestCDN:
                     return False
 
         return True
+
+    @staticmethod
+    def test_edge_caches_are_available():
+        for edge_host in EDGE_CACHE_HOSTS:
+            assert ping(edge_host), f'{edge_host} is not responding to ping'
 
     def test_origin_group_created(self):
         if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
@@ -395,7 +413,7 @@ class TestCDN:
             else:  # allowed
                 assert request_code != 403, f'CDN resource 403, should be not'
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_edge_cache_settings_enabled(self):
         resources_to_test = []
@@ -418,10 +436,10 @@ class TestCDN:
         if not resources_to_test:
             pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled')
 
-        resources_statuses = self.ping_resources_within_period_of_time(resources=resources_to_test)
+        resources_statuses = self.http_get_request_resources_within_period_of_time(resources=resources_to_test)
         assert self.resources_are_correctly_processed_by_edge_caches(resources_statuses=resources_statuses)
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_edge_cache_settings_disabled(self):
         resources_to_test = []
