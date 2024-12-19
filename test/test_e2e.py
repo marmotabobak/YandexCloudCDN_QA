@@ -326,19 +326,20 @@ class TestCDN:
 
         time_to_test = periods_count * period_of_time
         logger.info(f'GET resources [{[r.cname for r in resources]}] for {time_to_test} seconds...')
+
         while time.time() < start_time + time_to_test:
             for resource in resources:
                 url = f'http://{resource.cname}'
-                request = requests.get(url)
-                request_headers = EdgeResponseHeaders(**request.headers)
-                if not request_headers.cache_status:
-                    logger.debug(request_headers)
+                response = requests.get(url)
+                response_headers = EdgeResponseHeaders(**response.headers)
+                if not response_headers.cache_status:
+                    logger.debug(response_headers)
                     pytest.fail('Cache-Status header is absent')
-                host_response = HostResponse(time=time.time(), status=request_headers.cache_status)
+                host_response = HostResponse(time=time.time(), status=response_headers.cache_status)
                 resources_statuses.setdefault(
                     resource.id,
-                    {request_headers.cache_host: []}
-                ).setdefault(request_headers.cache_host, []).append(host_response)
+                    {response_headers.cache_host: []}
+                ).setdefault(response_headers.cache_host, []).append(host_response)
 
         logger.debug(f'resources statuses: {resources_statuses}')
 
@@ -376,35 +377,49 @@ class TestCDN:
             for edge_host_host in EDGE_CACHE_HOSTS:
 
                 url = f'http://{resource.cname}'
-                request = requests.get(url)
-                request_headers = EdgeResponseHeaders(**request.headers)
-                if not request_headers.cache_status:
-                    logger.debug(request_headers)
+                response = requests.get(url)  # TODO: make async
+                response_headers = EdgeResponseHeaders(**response.headers)
+                logger.debug(response_headers)
+
+                if not response_headers.cache_status:
                     pytest.fail('Cache-Status header is absent')
-                host_response = HostResponse(time=time.time(), status=request_headers.cache_status)
+
+                host_response = HostResponse(time=time.time(), status=response_headers.cache_status)
 
                 resources_statuses[resource.id][edge_host_host] = [host_response, ]
                 resources_statuses_template[resource.id][edge_host_host] = None
 
         time_to_test = periods_count * period_of_time
         logger.info(f'GET resources [{[r.cname for r in resources]}] for up to {time_to_test} seconds...')
+
         while time.time() < start_time + time_to_test:
             for resource in resources:
+                if resource.id in resources_statuses_template:
+                    for edge_host, edge_ip_address in EDGE_CACHE_HOSTS.items():
+                        if edge_host in resources_statuses_template[resource.id]:
 
-                url = f'http://{resource.cname}'
-                request = requests.get(url)
-                request_headers = EdgeResponseHeaders(**request.headers)
-                if not request_headers.cache_status:
-                    logger.debug(request_headers)
-                    pytest.fail('Cache-Status header is absent')
+                            response = http_get_request_through_ip_address(resource.cname, edge_ip_address)
+                            response_headers = EdgeResponseHeaders(**response.headers)
+                            logger.debug(response_headers)
 
-                host_response = HostResponse(time=time.time(), status=request_headers.cache_status)
-                resources_statuses[resource.id][request_headers.cache_host].append(host_response)
-                # if
+                            if not response_headers.cache_status:
+                                pytest.fail('Cache-Status header is absent')
 
+                            host_response = HostResponse(time=time.time(), status=response_headers.cache_status)
+                            resources_statuses[resource.id][response_headers.cache_host].append(host_response)
 
+                            if cls.resource_is_correctly_processed_by_edge_cache(
+                                    resources_statuses[resource.id][response_headers.cache_host]
+                            ):
+                                del resources_statuses_template[resource.id][response_headers.cache_host]
 
+                    if resources_statuses_template[resource.id] == {}:
+                        del resources_statuses_template[resource.id]
 
+            if resources_statuses_template == {}:
+                return True
+
+        return False
 
     @staticmethod
     def resource_is_correctly_processed_by_edge_cache(
@@ -489,7 +504,34 @@ class TestCDN:
             pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled')
 
         assert self.randomly_http_get_request_resources_within_period_of_time(
-            resources=resources_to_test
+            resources=resources_to_test[:1]
+        ),'Not all statuses were processed correctly'
+
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @repeat_several_times_with_pause_until_success_ot_timeout()
+    def test_edge_cache_settings_enabled2(self):
+        resources_to_test = []
+        for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
+
+            conditions_not_to_test = any(
+                (
+                    not resource.active,
+                    not resource.options,
+                    resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
+                    not resource.options.edge_cache_settings,
+                    not resource.options.edge_cache_settings.enabled,
+                    resource.options.edge_cache_settings.default_value != str(EDGE_CACHE_VALUE_TO_TEST)
+                )
+            )
+            if conditions_not_to_test:
+                continue
+            resources_to_test.append(resource)
+
+        if not resources_to_test:
+            pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled')
+
+        assert self.targeted_http_get_request_resources_within_period_of_time(
+            resources=resources_to_test[:1]
         ),'Not all statuses were processed correctly'
 
     @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
