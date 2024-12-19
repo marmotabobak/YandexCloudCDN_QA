@@ -35,9 +35,9 @@ def make_random_8_symbols():
 def make_query_string_from_args(args_dict: Dict[str, str]) -> str:
     return str.join('&', [f'{arg}={val}' for arg, val in args_dict.items()])
 
-def ping(host) -> Optional[subprocess.CompletedProcess]:
+def ping(host: str, attempts: int = 1) -> Optional[subprocess.CompletedProcess]:
     param = '-n' if subprocess.run(['uname'], capture_output=True, text=True).stdout.strip() == 'Windows' else '-c'
-    command = ['ping', param, '1', host]
+    command = ['ping', param, str(attempts), host]
     try:
         res = subprocess.run(command, capture_output=True, text=True, check=True)
         return res
