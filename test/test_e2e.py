@@ -11,6 +11,7 @@ from enum import Enum
 from collections import namedtuple
 from pydantic import BaseModel, ConfigDict, Field
 from utils import ping, http_get_request_through_ip_address
+from copy import  deepcopy
 
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
@@ -312,7 +313,8 @@ class TestCDN:
         assert True
 
     @staticmethod
-    def http_get_request_resources_within_period_of_time(
+    # TODO: make async otherwise too few requests and needs too many perions_count to assert successfully
+    def randomly_http_get_request_resources_within_period_of_time(
             resources: List[CDNResource],
             period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
             periods_count: int = EDGE_CACHE_PERIODS_TO_TEST
@@ -335,42 +337,26 @@ class TestCDN:
                     resource.id,
                     {request_headers.cache_host: []}
                 ).setdefault(request_headers.cache_host, []).append(host_response)
-            time.sleep(0.1)
 
         return resources_statuses
 
-    # TODO: tests only cases that were reached and only that they answered not faster than 90% of cache period
-    # NB! may be both false positive and false negative as there is probability that some edges have not been reached enough number of times
-    # TODO: Refactor with reaching specific edge caches
     @staticmethod
-    def resources_are_correctly_processed_by_edge_caches(
-            resources_statuses: Dict[str, Dict[str, List[HostResponse]]],
+    def resource_is_correctly_processed_by_edge_cache(
+            statuses: List[HostResponse],
             period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
             error_rate: float = 0.9
     ) -> bool:
 
-        if not resources_statuses:
-            logger.error('resources_statuses is empty or None')
-            return False
+        last_revalidated_or_miss = None
 
-        for resource_id, resource_statuses in resources_statuses.items():
-            for host_name, host_responses in resource_statuses.items():
-                last_revalidated_or_miss = None
+        for host_response in statuses:
+            if host_response.status in ('REVALIDATED', 'MISS'):
+                if last_revalidated_or_miss:
+                    # TODO: Check no the time of response received but response prepared by host? (Header 'Date:...')
+                    return host_response.time - last_revalidated_or_miss > error_rate * period_of_time
+                last_revalidated_or_miss = host_response.time
 
-                for host_response in host_responses:
-                    logger.debug(f'Resource: [{resource_id}], edge [{host_name}], responses: {host_responses}')
-                    if host_response.status in ('REVALIDATED', 'MISS'):
-                        if last_revalidated_or_miss:
-                            # TODO: Check no the time of response received but response prepared by host? (Header 'Date:...')
-                            if host_response.time - last_revalidated_or_miss <= error_rate * period_of_time:
-                                return False
-                        last_revalidated_or_miss = host_response.time
-
-                if not last_revalidated_or_miss:
-                    logger.error('Resource requests were not processed due to lack of data')
-                    return False
-
-        return True
+        return False
 
     @staticmethod
     def test_edge_caches_are_available():
@@ -413,8 +399,8 @@ class TestCDN:
             else:  # allowed
                 assert request_code != 403, f'CDN resource 403, should be not'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
-    @repeat_several_times_with_pause_until_success_ot_timeout()
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_edge_cache_settings_enabled(self):
         resources_to_test = []
         for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
@@ -436,8 +422,20 @@ class TestCDN:
         if not resources_to_test:
             pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled')
 
-        resources_statuses = self.http_get_request_resources_within_period_of_time(resources=resources_to_test)
-        assert self.resources_are_correctly_processed_by_edge_caches(resources_statuses=resources_statuses)
+        resources_statuses = self.randomly_http_get_request_resources_within_period_of_time(resources=resources_to_test)
+        logger.debug(f'resources statuses: {resources_statuses}')
+
+        resources_statuses_copy = deepcopy(resources_statuses)
+
+        for resource_id, resource_statuses in resources_statuses.items():
+            for host_name, host_responses in resource_statuses.items():
+                if self.resource_is_correctly_processed_by_edge_cache(host_responses):
+                    resources_statuses_copy[resource_id].pop(host_name)
+            if not resources_statuses_copy[resource_id]:
+                resources_statuses_copy.pop(resource_id)
+
+        logger.debug(f'resources statuses after processing: {resources_statuses_copy}')
+        assert not resources_statuses_copy, 'Not all statuses were processed correctly'
 
     @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
