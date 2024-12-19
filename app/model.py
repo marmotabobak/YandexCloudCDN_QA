@@ -115,10 +115,6 @@ class CDNResourceOptions(BaseModelWithAliases):
             self_dict.pop('edge_cache_settings', None)
             other_dict.pop('edge_cache_settings', None)
 
-        if (not self.ip_address_acl or not self.ip_address_acl.enabled) and (not other.ip_address_acl or not other.ip_address_acl.enabled):
-            self_dict.pop('ip_address_acl', None)
-            other_dict.pop('ip_address_acl', None)
-
         if (not self.rewrite or not self.rewrite.enabled) and (not other.rewrite or not other.rewrite.enabled):
             self_dict.pop('rewrite', None)
             other_dict.pop('rewrite', None)
@@ -127,9 +123,9 @@ class CDNResourceOptions(BaseModelWithAliases):
             self_dict.pop('ip_address_acl', None)
             other_dict.pop('ip_address_acl', None)
 
-        if (not self.query_params_options or not self.query_params_options.ignore_query_string.enabled or not self.query_params_options.ignore_query_string.value) and (not other.query_params_options or not other.query_params_options.ignore_query_string.enabled or not other.query_params_options.ignore_query_string.value):
-            self_dict.pop('ip_address_acl', None)
-            other_dict.pop('ip_address_acl', None)
+        if (not self.query_params_options or not self.query_params_options.ignore_query_string.value) and (not other.query_params_options or not other.query_params_options.ignore_query_string.value):
+            self_dict.pop('query_params_options', None)
+            other_dict.pop('query_params_options', None)
 
         for option_name, option_value in self_dict.items():
             other_option_value = other_dict[option_name]

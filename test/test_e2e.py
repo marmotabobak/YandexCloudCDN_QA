@@ -4,7 +4,7 @@ import time
 import pytest
 import requests
 import os
-from typing import Callable, Any, List, Optional
+from typing import Callable, Any, List, Optional, Dict
 from functools import wraps
 from datetime import datetime, timedelta
 from enum import Enum
@@ -217,7 +217,7 @@ class TestCDN:
         #     pytest.fail('Existing resources are not equal to default')
         logger.info(f'Success: all resources have been equal to default for {API_DELAY} seconds')
 
-        cls.resources[0].active = False  #     'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
+        cls.resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
 
         cls.resources[1].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value='10')  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
 
@@ -298,6 +298,67 @@ class TestCDN:
     def test_setup(cls):
         assert True
 
+    @staticmethod
+    def ping_resources_within_period_of_time(
+            resources: List[CDNResource],
+            period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
+            periods_count: int = EDGE_CACHE_PERIODS_TO_TEST
+    ) -> Dict[str, Dict[str, List[str]]]:
+        start_time = time.time()
+        resources_statuses = {}
+
+        time_to_test = periods_count * period_of_time
+        logger.info(f'GET resources [{[r.cname for r in resources]}] for {time_to_test} seconds...')
+        while time.time() < start_time + time_to_test:
+            for resource in resources:
+                url = f'http://{resource.cname}'
+                request = requests.get(url)
+                request_headers = EdgeResponseHeaders(**request.headers)
+                if not request_headers.cache_status:
+                    logger.debug(request_headers)
+                    pytest.fail('Cache-Status header is absent')
+                host_response = HostResponse(time=time.time(), status=request_headers.cache_status)
+                resources_statuses.setdefault(
+                    resource.id,
+                    {request_headers.cache_host: []}
+                ).setdefault(request_headers.cache_host, []).append(host_response)
+            time.sleep(0.1)
+
+        return resources_statuses
+
+    # TODO: tests only cases that were reached and only that they answered not faster than 90% of cache period
+    # NB! may be both false positive and false negative as there is probability that some edges have not been reached enough number of times
+    # TODO: Refactor with reaching specific edge caches
+    @staticmethod
+    def resources_are_correctly_processed_by_edge_caches(
+            resources_statuses: Dict[str, Dict[str, List[str]]],
+            period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
+            error_rate: float = 0.9
+    ) -> bool:
+
+        if not resources_statuses:
+            logger.error('resources_statuses is empty or None')
+            return False
+
+        for resource_id, resource_statuses in resources_statuses.items():
+            for host_name, host_responses in resource_statuses.items():
+                last_revalidated_or_miss = None
+
+                for host_response in host_responses:
+                    logger.debug(f'Resource: [{resource_id}], edge [{host_name}], responses: {host_responses}')
+                    if host_response.status in ('REVALIDATED', 'MISS'):
+                        if last_revalidated_or_miss:
+                            # TODO: Check no the time of response received but response prepared by host? (Header 'Date:...')
+                            if host_response.time - last_revalidated_or_miss <= error_rate * period_of_time:
+                                return False
+                        last_revalidated_or_miss = host_response.time
+
+                if not last_revalidated_or_miss:
+                    logger.error('Resource requests were not processed due to lack of data')
+                    return False
+
+        return True
+
     def test_origin_group_created(self):
         if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
             assert self.origin_group.id, 'Origin group not created'
@@ -334,7 +395,7 @@ class TestCDN:
             else:  # allowed
                 assert request_code != 403, f'CDN resource 403, should be not'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_edge_cache_settings_enabled(self):
         resources_to_test = []
@@ -354,42 +415,13 @@ class TestCDN:
                 continue
             resources_to_test.append(resource)
 
-
         if not resources_to_test:
-            pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled ')
+            pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled')
 
-        start_time = time.time()
-        resources_statuses = {}
+        resources_statuses = self.ping_resources_within_period_of_time(resources=resources_to_test)
+        assert self.resources_are_correctly_processed_by_edge_caches(resources_statuses=resources_statuses)
 
-        time_to_test = EDGE_CACHE_PERIODS_TO_TEST * EDGE_CACHE_VALUE_TO_TEST
-        logger.info(f'GET resources [{[r.cname for r in resources_to_test]}] for {time_to_test} seconds...')
-        while time.time() < start_time + time_to_test:
-            for resource in resources_to_test:
-                url = f'http://{resource.cname}'
-                request = requests.get(url)
-                request_headers = EdgeResponseHeaders(**request.headers)
-                if not request_headers.cache_status:
-                    logger.debug(request_headers)
-                    pytest.fail('Cache-Status header is absent')
-                host_response = HostResponse(time=time.time(), status=request_headers.cache_status)
-                resources_statuses.setdefault(
-                    resource.id,
-                    {request_headers.cache_host: []}
-                ).setdefault(request_headers.cache_host, []).append(host_response)
-
-            time.sleep(0.1)
-
-        for resource_id, resource_statuses in resources_statuses.items():
-            for host_name, host_responses in resource_statuses.items():
-                last_revalidated_or_miss = None
-                for host_response in host_responses:
-                    if host_response.status in ('REVALIDATED', 'MISS'):
-                        if last_revalidated_or_miss:
-                            # TODO: Check no the time of response received but respone prepared by host? (Header 'Date:...')
-                            assert host_response.time - last_revalidated_or_miss > 0.9 * EDGE_CACHE_VALUE_TO_TEST  # 0.9 to be sure
-                        last_revalidated_or_miss = host_response.time
-
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_edge_cache_settings_disabled(self):
         resources_to_test = []
