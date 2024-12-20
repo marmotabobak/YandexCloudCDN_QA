@@ -25,8 +25,6 @@ logger = logging.getLogger(__name__)
 # TODO: implement negative tests
 
 class RevalidatedTooEarly(Exception):
-    # def __init__(self, message: str):
-    #     super().__init__(message)
     ...
 
 class EdgeResponseHeaders(BaseModel):
@@ -87,6 +85,8 @@ EDGE_CACHE_HOSTS = {
     'mar-srv04.yccdn.cloud.yandex.net': '188.72.105.5',
     'mar-srv05.yccdn.cloud.yandex.net': '188.72.105.6',
 }
+CURL_FINISH_ONCE_SUCCESS = True
+
 
 def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15):
     def decorator(func: Callable):
@@ -336,8 +336,10 @@ class TestCDN:
             protocol: str = 'http',
             period_of_time: int = SHORT_TTL,
             periods_count: int = EDGE_CACHE_PERIODS_TO_TEST,
-            add_query_arg: bool = False
+            add_query_arg: bool = False,
+            finish_once_success: bool = CURL_FINISH_ONCE_SUCCESS
     ) -> bool:
+
         start_time = time.time()
         resources_statuses = {}
         query_generator = increment()
@@ -360,6 +362,13 @@ class TestCDN:
                     resource.id,
                     {response_headers.cache_host: []}
                 ).setdefault(response_headers.cache_host, []).append(host_response)
+
+                if finish_once_success:
+                    if cls.resource_is_correctly_processed_by_edge(
+                            statuses=resources_statuses[resource.id][response_headers.cache_host],
+                            period_of_time=period_of_time
+                    ):
+                        return True
 
         logger.debug(f'resources statuses: {resources_statuses}')
 
@@ -386,7 +395,8 @@ class TestCDN:
             resources: List[CDNResource],
             period_of_time: int = SHORT_TTL,
             periods_count: int = EDGE_CACHE_PERIODS_TO_TEST,
-            add_query_arg: bool = False
+            add_query_arg: bool = False,
+            finish_once_success: bool = CURL_FINISH_ONCE_SUCCESS
     ) -> bool:
 
         resources_statuses = {}
@@ -435,9 +445,13 @@ class TestCDN:
                             resources_statuses[resource.id][response_headers.cache_host].append(host_response)
 
                             if cls.resource_is_correctly_processed_by_edge(
-                                resources_statuses[resource.id][response_headers.cache_host],
+                                statuses=resources_statuses[resource.id][response_headers.cache_host],
                                 period_of_time=period_of_time
                             ):
+
+                                if finish_once_success:
+                                    return True
+
                                 del resources_statuses_template[resource.id][response_headers.cache_host]
 
                     if resources_statuses_template[resource.id] == {}:
@@ -485,7 +499,7 @@ class TestCDN:
     def test_resources_are_created(self):
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_active_and_not_active_resources(self):
         for resource in self.resources:
@@ -498,7 +512,7 @@ class TestCDN:
             else:  # inactive
                 assert request_code == 404, f'CDN resource {request_code}, should be 404'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_ip_address_acl(self):
         for resource in self.resources:
@@ -514,7 +528,7 @@ class TestCDN:
             else:  # allowed
                 assert request_code != 403, f'CDN resource 403, should be not'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_revalidate_out_of_ttl(self):
         resources_to_test = []
