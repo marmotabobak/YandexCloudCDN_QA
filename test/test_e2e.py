@@ -31,7 +31,7 @@ class EdgeResponseHeaders(BaseModel):
 
     cache_host: str = Field(..., alias='Cache-Host')
     cache_status: Optional[str] = Field(None, alias='Cache-Status')
-    fizz: Optional[str] = Field(None)
+    param_to_test: Optional[str] = Field(None, alias='param-to-test')
 
 HostResponse = namedtuple('HostResponse', 'time, status')
 
@@ -85,6 +85,8 @@ EDGE_CACHE_HOSTS = {
     'mar-srv05.yccdn.cloud.yandex.net': '188.72.105.6',
 }
 CURL_FINISH_ONCE_SUCCESS = True
+PROTOCOL = 'http'
+CUSTOM_HEADER = False
 
 
 def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15):
@@ -193,7 +195,7 @@ class TestCDN:
 
         cls.method_to_curl_resources = cls.randomly_curl_resources
 
-        cls.custom_header = make_random_8_symbols()
+        cls.custom_header = make_random_8_symbols() if CUSTOM_HEADER else 'param-to-test'
 
         cls.resources_proc = ResourcesAPIProcessor(
             entity_name=EntityName.CDN_RESOURCE,
@@ -507,12 +509,20 @@ class TestCDN:
         return resources_to_test
 
     @staticmethod
-    def resource_is_active_and_no_acl_and_cache_settings(resource: CDNResource) -> bool:
+    def resource_is_active_and_no_acl(resource: CDNResource) -> bool:
         return all(
             (
                 resource.active,
                 resource.options,
                 not resource.options.ip_address_acl or not resource.options.ip_address_acl.enabled,
+            )
+        )
+
+    @classmethod
+    def resource_is_active_and_no_acl_and_cache_enabled(cls, resource: CDNResource) -> bool:
+        return all(
+            (
+                cls.resource_is_active_and_no_acl(resource),
                 resource.options.edge_cache_settings,
             )
         )
@@ -521,7 +531,7 @@ class TestCDN:
     def resource_is_active_and_no_acl_and_ttl(cls, resource: CDNResource) -> bool:
         return all(
             (
-                cls.resource_is_active_and_no_acl_and_cache_settings(resource),
+                cls.resource_is_active_and_no_acl_and_cache_enabled(resource),
                 resource.options.edge_cache_settings.enabled,
             )
         )
@@ -620,7 +630,7 @@ class TestCDN:
         def filter_to_test(r: CDNResource) -> bool:
             return all(
                 (
-                    self.resource_is_active_and_no_acl_and_cache_settings(r),
+                    self.resource_is_active_and_no_acl_and_cache_enabled(r),
                     not r.options.edge_cache_settings.enabled,
                 )
             )
@@ -630,9 +640,9 @@ class TestCDN:
         logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
         for resource in resources_to_test:
             url = f'http://{resource.cname}'
-            request = requests.get(url)
-            request_headers = EdgeResponseHeaders(**request.headers)
-            assert not request_headers.cache_status
+            response = requests.get(url)
+            response_headers = EdgeResponseHeaders(**response.headers)
+            assert not response_headers.cache_status
 
     @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
@@ -670,8 +680,33 @@ class TestCDN:
         with pytest.raises(RevalidatedTooEarly):
             self.method_to_curl_resources(resources_to_test, add_query_arg=True)
 
-    # def test_static_header_is_set(self):
-    #     resources_to_test = self.prepare_resources_list_to_test(self.res)
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @repeat_until_success_or_timeout()
+    def test_static_header_is_set(self):
+        def filter_to_test(r: CDNResource) -> bool:
+            return all(
+                (
+                    self.resource_is_active_and_no_acl(r),
+                    r.options.static_headers,
+                    r.options.static_headers.enabled,
+                    'param-to-test' in r.options.static_headers.value
+                )
+            )
+
+        resources_to_test = self.prepare_resources_list_to_test(filter_to_test)
+        logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
+
+        for resource in resources_to_test:
+            url = f'{PROTOCOL}://{resource.cname}'
+            response = requests.get(url=url)
+            response_headers = EdgeResponseHeaders(**response.headers)
+            param_value = response_headers.param_to_test
+
+            logger.debug(f'request: GET {url}')
+            logger.debug(f'response headers: {response_headers}')
+
+            assert param_value == self.custom_header, (f'expected header [param-to-test] '
+                                                 f'with value [{self.custom_header}], got {param_value}')
 
 
 
