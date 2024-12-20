@@ -77,6 +77,7 @@ class ResourcesAPIProcessor(APIProcessor):
 
         payload = updated_resource.model_dump(exclude={'created_at', 'updated_at'}, by_alias=True)
         request = requests.patch(url=url, headers=headers, json=payload)
+        logging.debug(f'request body:\n {request.request.body}')
 
         response_status = request.status_code
         if response_status == 200:

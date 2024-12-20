@@ -29,7 +29,7 @@ def repeat_and_sleep(times_to_repeat: int = 3, sleep_duration: int = 1):
         return wrapper
     return decorator
 
-def make_random_8_symbols():
+def make_random_8_symbols() -> str:
     return str(uuid.uuid4())[:8]
 
 def make_query_string_from_args(args_dict: Dict[str, str]) -> str:
