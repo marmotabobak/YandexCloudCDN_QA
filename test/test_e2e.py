@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from collections import namedtuple
 from pydantic import BaseModel, ConfigDict, Field
-from utils import ping, http_get_request_through_ip_address
+from utils import ping, http_get_request_through_ip_address, increment
 from copy import  deepcopy
 
 from app.origingroup import OriginGroupsAPIProcessor
@@ -367,18 +367,23 @@ class TestCDN:
             cls,
             resources: List[CDNResource],
             period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
-            periods_count: int = EDGE_CACHE_PERIODS_TO_TEST
+            periods_count: int = EDGE_CACHE_PERIODS_TO_TEST,
+            add_query_arg: bool = False
     ) -> bool:
 
         resources_statuses = {}
         resources_statuses_template = {}
+        query_generator = increment()
 
         for resource in resources:
             resources_statuses[resource.id] = {}
             resources_statuses_template[resource.id] = {}
             for edge_host_host, edge_ip_address in EDGE_CACHE_HOSTS.items():
 
-                response = http_get_request_through_ip_address(resource.cname, edge_ip_address)
+                url = resource.cname
+                if add_query_arg:
+                    url += '?foo=' + str(next(query_generator))
+                response = http_get_request_through_ip_address(url, edge_ip_address)
                 response_headers = EdgeResponseHeaders(**response.headers)
                 logger.debug(response_headers)
 
@@ -399,7 +404,10 @@ class TestCDN:
                     for edge_host, edge_ip_address in EDGE_CACHE_HOSTS.items():
                         if edge_host in resources_statuses_template[resource.id]:
 
-                            response = http_get_request_through_ip_address(resource.cname, edge_ip_address)
+                            url = resource.cname
+                            if add_query_arg:
+                                url += '?foo=' + str(next(query_generator))
+                            response = http_get_request_through_ip_address(url, edge_ip_address)
                             response_headers = EdgeResponseHeaders(**response.headers)
 
                             if not response_headers.cache_status:
@@ -544,6 +552,8 @@ class TestCDN:
             request_headers = EdgeResponseHeaders(**request.headers)
             assert not request_headers.cache_status
 
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_ignore_query_string(self):
         resources_to_test = []
         for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
@@ -555,6 +565,7 @@ class TestCDN:
                     resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
                     not resource.options.edge_cache_settings,
                     not resource.options.edge_cache_settings.enabled,
+                    resource.options.edge_cache_settings.default_value != str(EDGE_CACHE_VALUE_TO_TEST),
                     not resource.options.query_params_options,
                     not resource.options.query_params_options.ignore_query_string,
                     not resource.options.query_params_options.ignore_query_string.enabled,
@@ -569,7 +580,11 @@ class TestCDN:
             pytest.fail(f'No resources found to test disabled edge_cache_settings')
 
         logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
+        assert self.targeted_http_get_request_resources_within_period_of_time(resources_to_test, add_query_arg=True)
 
+
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_do_not_ignore_query_string(self):
         resources_to_test = []
         for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST

@@ -1,7 +1,7 @@
 import logging
 import time
 from functools import wraps
-from typing import Callable, Any, Dict, Optional
+from typing import Callable, Any, Dict, Optional, Generator
 import uuid
 import subprocess
 import requests
@@ -72,3 +72,9 @@ def http_get_request_through_ip_address(url: str, ip_address: str) -> Optional[r
     except requests.RequestException as e:
         #TODO: implement exception processing
         ...
+
+def increment() -> Generator[int, None, None]:
+    i = 0
+    while True:
+        i += 1
+        yield i

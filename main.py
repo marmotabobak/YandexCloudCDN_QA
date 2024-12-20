@@ -65,3 +65,13 @@ def main():
     #     print('=( FAIL =(')
     #
 
+
+
+
+from utils import increment
+
+inc = increment()
+print(next(inc))
+
+print(next(inc))
+
