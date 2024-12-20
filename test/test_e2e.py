@@ -66,7 +66,8 @@ EXISTING_RESOURCES_IDS = {
     'cdnrcqdphowdoxyxrufs': 'yccdn-qa-9.marmota-bobak.ru',
     'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
 }
-EDGE_CACHE_VALUE_TO_TEST = 10
+EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL = 10
+EDGE_CACHE_VALUE_TO_TEST_WITHIN_TTL = 3600
 EDGE_CACHE_PERIODS_TO_TEST = 2
 EDGE_CACHE_HOSTS = {
     'm9-srv01.yccdn.cloud.yandex.net': '188.72.104.2',
@@ -236,13 +237,15 @@ class TestCDN:
 
         cls.resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
 
-        cls.resources[1].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value='10')  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
+        cls.resources[1].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL))  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
 
-        cls.resources[2].options.edge_cache_settings = EdgeCacheSettings(enabled=False, default_value='10')  # 'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru'
+        cls.resources[2].options.edge_cache_settings = EdgeCacheSettings(enabled=False, default_value=str(EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL))  # 'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru'
 
         cls.resources[3].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=True))  # 'cdnr5t2qvpsnaaglie2c': 'yccdn-qa-4.marmota-bobak.ru'
 
         cls.resources[4].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=False))  # 'cdnrpnabfdp7u6drjaua': 'yccdn-qa-5.marmota-bobak.ru'
+
+        cls.resources[5].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(EDGE_CACHE_VALUE_TO_TEST_WITHIN_TTL))
 
         cls.resources[9].options.ip_address_acl = IpAddressAcl(    # 'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
             enabled=True,
@@ -321,7 +324,7 @@ class TestCDN:
     def randomly_http_get_request_resources_within_period_of_time(
             cls,
             resources: List[CDNResource],
-            period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
+            period_of_time: int = EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL,
             periods_count: int = EDGE_CACHE_PERIODS_TO_TEST
     ) -> bool:
         start_time = time.time()
@@ -366,7 +369,7 @@ class TestCDN:
     def targeted_http_get_request_resources_within_period_of_time(
             cls,
             resources: List[CDNResource],
-            period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
+            period_of_time: int = EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL,
             periods_count: int = EDGE_CACHE_PERIODS_TO_TEST,
             add_query_arg: bool = False
     ) -> bool:
@@ -433,7 +436,7 @@ class TestCDN:
     @staticmethod
     def resource_is_correctly_processed_by_edge_cache(
             statuses: List[HostResponse],
-            period_of_time: int = EDGE_CACHE_VALUE_TO_TEST,
+            period_of_time: int = EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL,
             error_rate: float = 0.9
     ) -> bool:
 
@@ -498,7 +501,7 @@ class TestCDN:
 
     @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
-    def test_edge_cache_settings_enabled(self):
+    def test_edge_cache_settings_enabled_revalidate_out_of_ttl(self):
         resources_to_test = []
         for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
 
@@ -509,7 +512,7 @@ class TestCDN:
                     resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
                     not resource.options.edge_cache_settings,
                     not resource.options.edge_cache_settings.enabled,
-                    resource.options.edge_cache_settings.default_value != str(EDGE_CACHE_VALUE_TO_TEST)
+                    resource.options.edge_cache_settings.default_value != str(EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL)
                 )
             )
             if conditions_not_to_test:
@@ -517,11 +520,39 @@ class TestCDN:
             resources_to_test.append(resource)
 
         if not resources_to_test:
-            pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST}] enabled')
+            pytest.fail(f'No resources to test edge_cache_settings with value [{EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL}] enabled')
 
         assert self.targeted_http_get_request_resources_within_period_of_time(
             resources=resources_to_test
-        ),'Not all statuses were processed correctly'
+        ), 'Not all statuses were processed correctly'
+
+    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @repeat_several_times_with_pause_until_success_ot_timeout()
+    def test_edge_cache_settings_enabled_do_not_revalidate_within_ttl(self):
+        resources_to_test = []
+        for resource in self.resources:  # selecting all resources with edge_cache_settings with value EDGE_CACHE_VALUE_TO_TEST
+
+            conditions_not_to_test = any(
+                (
+                    not resource.active,
+                    not resource.options,
+                    resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
+                    not resource.options.edge_cache_settings,
+                    not resource.options.edge_cache_settings.enabled,
+                    resource.options.edge_cache_settings.default_value != str(EDGE_CACHE_VALUE_TO_TEST_WITHIN_TTL)
+                )
+            )
+            if conditions_not_to_test:
+                continue
+            resources_to_test.append(resource)
+
+        if not resources_to_test:
+            pytest.fail(f'No resources to test edge_cache_settings '
+                        f'with value [{EDGE_CACHE_VALUE_TO_TEST_WITHIN_TTL}] enabled')
+
+        assert not self.targeted_http_get_request_resources_within_period_of_time(
+            resources=resources_to_test
+        ), 'Not all statuses were processed correctly'
 
     @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
@@ -552,7 +583,7 @@ class TestCDN:
             request_headers = EdgeResponseHeaders(**request.headers)
             assert not request_headers.cache_status
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_ignore_query_string(self):
         resources_to_test = []
@@ -565,7 +596,7 @@ class TestCDN:
                     resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
                     not resource.options.edge_cache_settings,
                     not resource.options.edge_cache_settings.enabled,
-                    resource.options.edge_cache_settings.default_value != str(EDGE_CACHE_VALUE_TO_TEST),
+                    resource.options.edge_cache_settings.default_value != str(EDGE_CACHE_VALUE_TO_TEST_OUT_OF_TTL),
                     not resource.options.query_params_options,
                     not resource.options.query_params_options.ignore_query_string,
                     not resource.options.query_params_options.ignore_query_string.enabled,
@@ -583,7 +614,7 @@ class TestCDN:
         assert self.targeted_http_get_request_resources_within_period_of_time(resources_to_test, add_query_arg=True)
 
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_several_times_with_pause_until_success_ot_timeout()
     def test_do_not_ignore_query_string(self):
         resources_to_test = []
@@ -609,4 +640,11 @@ class TestCDN:
             pytest.fail(f'No resources found to test disabled edge_cache_settings')
 
         logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
+
+        for resource in resources_to_test:
+            for edge_host in EDGE_CACHE_HOSTS:
+                url = f'http://{resource.cname}'
+                request = requests.get(url)
+                request_headers = EdgeResponseHeaders(**request.headers)
+                assert not request_headers.cache_status
 
