@@ -24,8 +24,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: implement negative tests
 
-class RevalidatedTooEarly(Exception):
-    ...
+class RevalidatedTooEarly(Exception): ...
 
 class EdgeResponseHeaders(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -206,6 +205,7 @@ class TestCDN:
 
         logger.info('--- SETUP ---')
 
+        # TODO: DEBUG COMMENTS - UNCOMMENT FOR PRODUCTION
         # if not cls.origin_is_available_with_200():
         #     pytest.fail('Origin is not available')
         #
@@ -265,9 +265,10 @@ class TestCDN:
             policy_type='POLICY_TYPE_ALLOW'
         )
 
-        # for resource in cls.resources:
-        #     cls.resources_proc.update(resource)
+        for resource in cls.resources:
+            cls.resources_proc.update(resource)
 
+        # TODO: DEBUG COMMENT - UNCOMMENT FOR PRODUCTION
         # if not cls.resources_are_equal_to_existing():
         #     pytest.fail('Updated resources are not equal to existing ones')
 
@@ -321,6 +322,8 @@ class TestCDN:
         elif INITIALIZE_TYPE == ResourcesInitializeType.USE_EXISTING:
             logger.info('Resetting resources to default...')
             # TODO: RESET TO DEFAULT
+
+            # TODO: DEBUG COMMENT - UNCOMMENT FOR PRODUCTION
             # assert cls.resources_are_equal_to_existing(), 'Resources were not reset'
 
         logger.info('done')
@@ -497,38 +500,38 @@ class TestCDN:
         return res
 
     @classmethod
-    def prepare_resources_list_to_test(cls, conditions_not_to_test: Callable) -> List[CDNResource]:
-        resources_to_test = [r for r in cls.resources if not conditions_not_to_test(r)]
+    def prepare_resources_list_to_test(cls, conditions: Callable) -> List[CDNResource]:
+        resources_to_test = [r for r in cls.resources if conditions(r)]
         if not resources_to_test:
             pytest.fail(f'No resources found to test disabled edge_cache_settings')
         return resources_to_test
 
     @staticmethod
-    def resource_is_not_active_or_acl_or_no_cache_settings(resource: CDNResource) -> bool:
-        return any(
+    def resource_is_active_and_no_acl_and_cache_settings(resource: CDNResource) -> bool:
+        return all(
             (
-                not resource.active,
-                not resource.options,
-                resource.options.ip_address_acl and resource.options.ip_address_acl.enabled,
-                not resource.options.edge_cache_settings,
+                resource.active,
+                resource.options,
+                not resource.options.ip_address_acl or not resource.options.ip_address_acl.enabled,
+                resource.options.edge_cache_settings,
             )
         )
 
     @classmethod
-    def resource_is_not_active_or_acl_or_no_ttl(cls, resource: CDNResource) -> bool:
-        return any(
+    def resource_is_active_and_no_acl_and_ttl(cls, resource: CDNResource) -> bool:
+        return all(
             (
-                cls.resource_is_not_active_or_acl_or_no_cache_settings(resource),
-                not resource.options.edge_cache_settings.enabled,
+                cls.resource_is_active_and_no_acl_and_cache_settings(resource),
+                resource.options.edge_cache_settings.enabled,
             )
         )
 
     @classmethod
-    def resource_is_not_active_or_acl_or_not_short_ttl(cls, resource: CDNResource) -> bool:
-        return any(
+    def resource_is_active_and_no_acl_and_short_ttl(cls, resource: CDNResource) -> bool:
+        return all(
             (
-                cls.resource_is_not_active_or_acl_or_no_ttl(resource),
-                resource.options.edge_cache_settings.default_value != str(SHORT_TTL)
+                cls.resource_is_active_and_no_acl_and_ttl(resource),
+                resource.options.edge_cache_settings.default_value == str(SHORT_TTL)
             )
         )
 
@@ -574,55 +577,55 @@ class TestCDN:
             else:  # allowed
                 assert request_code != 403, f'CDN resource 403, should be not'
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_revalidate_out_of_ttl(self):
 
-        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_not_active_or_acl_or_not_short_ttl)
+        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_active_and_no_acl_and_short_ttl)
 
         assert self.method_to_curl_resources(
             resources=resources_to_test
         ), 'Not all statuses were processed correctly'
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_revalidate_too_early_error(self):
 
-        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_not_active_or_acl_or_not_short_ttl)
+        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_active_and_no_acl_and_short_ttl)
 
         with pytest.raises(RevalidatedTooEarly):
             self.method_to_curl_resources(resources=resources_to_test, period_of_time=2*SHORT_TTL)
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_do_not_revalidate_within_ttl(self):
-        def filter_not_to_test(r: CDNResource) -> bool:
-            return any(
+        def filter_to_test(r: CDNResource) -> bool:
+            return all(
                 (
-                    self.resource_is_not_active_or_acl_or_no_ttl(r),
-                    r.options.edge_cache_settings.default_value != str(LONG_TTL)
+                    self.resource_is_active_and_no_acl_and_ttl(r),
+                    r.options.edge_cache_settings.default_value == str(LONG_TTL)
 
                 )
             )
 
-        resources_to_test = self.prepare_resources_list_to_test(filter_not_to_test)
+        resources_to_test = self.prepare_resources_list_to_test(filter_to_test)
 
         assert not self.method_to_curl_resources(
             resources=resources_to_test
         ), 'Not all statuses were processed correctly'
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_disabled(self):
-        def filter_not_to_test(r: CDNResource) -> bool:
-            return any(
+        def filter_to_test(r: CDNResource) -> bool:
+            return all(
                 (
-                    self.resource_is_not_active_or_acl_or_no_cache_settings(r),
-                    r.options.edge_cache_settings.enabled,
+                    self.resource_is_active_and_no_acl_and_cache_settings(r),
+                    not r.options.edge_cache_settings.enabled,
                 )
             )
 
-        resources_to_test = self.prepare_resources_list_to_test(filter_not_to_test)
+        resources_to_test = self.prepare_resources_list_to_test(filter_to_test)
 
         logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
         for resource in resources_to_test:
@@ -631,41 +634,45 @@ class TestCDN:
             request_headers = EdgeResponseHeaders(**request.headers)
             assert not request_headers.cache_status
 
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_ignore_query_string(self):
-        def filter_not_to_test(r: CDNResource) -> bool:
-            return any(
+        def filter_to_test(r: CDNResource) -> bool:
+            return all(
                 (
-                    self.resource_is_not_active_or_acl_or_not_short_ttl(r),
-                    not r.options.query_params_options,
-                    not r.options.query_params_options.ignore_query_string,
-                    not r.options.query_params_options.ignore_query_string.enabled,
-                    not r.options.query_params_options.ignore_query_string.value,
-                )
-            )
-
-        resources_to_test = self.prepare_resources_list_to_test(filter_not_to_test)
-
-        assert self.method_to_curl_resources(resources_to_test, add_query_arg=True)
-
-    # @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
-    @repeat_until_success_or_timeout()
-    def test_do_not_ignore_query_string(self):
-        def filter_not_to_test(r: CDNResource) -> bool:
-            return any(
-                (
-                    self.resource_is_not_active_or_acl_or_no_ttl(r),
-                    not r.options.query_params_options,
-                    not r.options.query_params_options.ignore_query_string,
+                    self.resource_is_active_and_no_acl_and_short_ttl(r),
+                    r.options.query_params_options,
+                    r.options.query_params_options.ignore_query_string,
+                    r.options.query_params_options.ignore_query_string.enabled,
                     r.options.query_params_options.ignore_query_string.value,
                 )
             )
 
-        resources_to_test = self.prepare_resources_list_to_test(filter_not_to_test)
+        resources_to_test = self.prepare_resources_list_to_test(filter_to_test)
+
+        assert self.method_to_curl_resources(resources_to_test, add_query_arg=True)
+
+    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @repeat_until_success_or_timeout()
+    def test_do_not_ignore_query_string(self):
+        def filter_to_test(r: CDNResource) -> bool:
+            return all(
+                (
+                    self.resource_is_active_and_no_acl_and_ttl(r),
+                    r.options.query_params_options,
+                    r.options.query_params_options.ignore_query_string,
+                    not r.options.query_params_options.ignore_query_string.value,
+                )
+            )
+
+        resources_to_test = self.prepare_resources_list_to_test(filter_to_test)
 
         with pytest.raises(RevalidatedTooEarly):
             self.method_to_curl_resources(resources_to_test, add_query_arg=True)
+
+    # def test_static_header_is_set(self):
+    #     resources_to_test = self.prepare_resources_list_to_test(self.res)
+
 
 
 
