@@ -267,8 +267,9 @@ class TestCDN:
             policy_type='POLICY_TYPE_ALLOW'
         )
 
-        for resource in cls.resources:
-            cls.resources_proc.update(resource)
+        # TODO: DEBUG COMMENTS - UNCOMMENT FOR PRODUCTION
+        # for resource in cls.resources:
+        #     cls.resources_proc.update(resource)
 
         # TODO: DEBUG COMMENT - UNCOMMENT FOR PRODUCTION
         # if not cls.resources_are_equal_to_existing():
@@ -686,7 +687,7 @@ class TestCDN:
         def filter_to_test(r: CDNResource) -> bool:
             return all(
                 (
-                    self.resource_is_active_and_no_acl(r),
+                    self.resource_is_active_and_no_acl_and_short_ttl(r),
                     r.options.static_headers,
                     r.options.static_headers.enabled,
                     'param-to-test' in r.options.static_headers.value
@@ -707,6 +708,7 @@ class TestCDN:
 
             assert param_value == self.custom_header, (f'expected header [param-to-test] '
                                                  f'with value [{self.custom_header}], got {param_value}')
+
 
 
 
