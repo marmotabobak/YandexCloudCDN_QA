@@ -210,14 +210,21 @@ class TestCDN:
 
         logger.info('--- SETUP ---')
 
-        # TODO: DEBUG COMMENTS - UNCOMMENT FOR PRODUCTION
-        # if not cls.origin_is_available_with_200():
-        #     pytest.fail('Origin is not available')
-        #
+        logger.info('Checking origins 200...')
+        if not cls.origin_is_available_with_200():
+            pytest.fail('Origin is not available')
+        logger.info('OK')
+
+        # TODO: DEBUG COMMENT - UNCOMMENT FOR PRODUCTION
+        # logger.info('Pinging edges...')
         # if edges := cls.get_not_pinged_edges():
         #     logging.warning(f'Edges are not pinged successfully: {edges}')
+        # logger.info('OK')
 
+        logger.info(f'Initializing and checking resources for {API_DELAY} seconds...')
         cls.initialize_resources()
+        logger.info('OK')
+
         logger.info('--- SETUP finished ---')
 
     @staticmethod
@@ -248,7 +255,6 @@ class TestCDN:
         # TODO: DEBUG COMMENT - UNCOMMENT FOR PRODUCTION
         # if not resources_are_equal_for_period_of_time(cls.resources_proc, cls.resources):
         #     pytest.fail('Existing resources are not equal to default')
-        logger.info(f'Success: all resources have been equal to default for {API_DELAY} seconds')
 
         cls.resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
 
@@ -505,6 +511,17 @@ class TestCDN:
                 res.append(edge_host)
         return res
 
+    @staticmethod
+    def http_get_resource(resource: CDNResource) -> int:
+        url = f'http://{resource.cname}'
+        logger.debug(f'GET {url}...')
+        request = requests.get(url)
+        return request.status_code
+
+
+
+
+
     @classmethod
     def prepare_resources_list_to_test(cls, conditions: Callable) -> List[CDNResource]:
         resources_to_test = [r for r in cls.resources if conditions(r)]
@@ -513,10 +530,18 @@ class TestCDN:
         return resources_to_test
 
     @staticmethod
-    def resource_is_active_and_no_acl(resource: CDNResource) -> bool:
+    def resource_is_active(resource: CDNResource) -> bool:
+        return resource.active
+
+    @classmethod
+    def resource_is_not_active(cls, resource: CDNResource) -> bool:
+        return not cls.resource_is_active(resource)
+
+    @classmethod
+    def resource_is_active_and_no_acl(cls, resource: CDNResource) -> bool:
         return all(
             (
-                resource.active,
+                cls.resource_is_active(resource),
                 resource.options,
                 not resource.options.ip_address_acl or not resource.options.ip_address_acl.enabled,
             )
@@ -564,16 +589,21 @@ class TestCDN:
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
-    def test_active_and_not_active_resources(self):
-        for resource in self.resources:
-            url = f'http://{resource.cname}'
-            logger.debug(f'GET {url}...')
-            request = requests.get(url)
-            request_code = request.status_code
-            if resource.active:
-                assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
-            else:  # inactive
-                assert request_code == 404, f'CDN resource {request_code}, should be 404'
+    def test_active_resources(self):
+        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_active)
+
+        for resource in resources_to_test:
+            request_code = self.http_get_resource(resource)
+            assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
+
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @repeat_until_success_or_timeout()
+    def test_not_active_resources(self):
+        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_not_active)
+
+        for resource in resources_to_test:
+            request_code = self.http_get_resource(resource)
+            assert request_code == 404, f'CDN resource {request_code}, should be 404'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()

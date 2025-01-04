@@ -17,4 +17,6 @@ Service communicates with Yandex Cloud CDN through REST API to support it's basi
 
 ## Known Yandex Cloud CND API bugs
 - allows to create yccdn cdn-resource with same cname with following crash of such resource
-- 
+
+## Testing
+```pytest -o log_cli=true --log-cli-level=INFO```
