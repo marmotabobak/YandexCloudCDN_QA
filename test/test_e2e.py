@@ -19,11 +19,10 @@ from app.model import OriginGroup, Origin, IpAddressAcl, CDNResource
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
 from app.utils import ping, http_get_request_through_ip_address, increment, make_random_8_symbols
+from test.utils import *
+from test.logger import logger
 
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logger = logging.getLogger(__name__)
-
-SKIP_TESTS = False
+SKIP_TESTS = True
 
 # TODO: implement negative tests
 
@@ -371,8 +370,10 @@ class TestCDN:
                 url = f'{protocol}://{resource.cname}'
                 if add_query_arg:
                     url += '?foo=' + str(next(query_generator))
+                logger.debug(f'GET {url}...')
                 response = requests.get(url)
                 response_headers = EdgeResponseHeaders(**response.headers)
+                logger.debug(response_headers)
                 if not response_headers.cache_status:
                     logger.debug(response_headers)
                     pytest.fail('Cache-Status header is absent')
@@ -511,68 +512,12 @@ class TestCDN:
                 res.append(edge_host)
         return res
 
-    @staticmethod
-    def http_get_resource(resource: CDNResource) -> int:
-        url = f'http://{resource.cname}'
-        logger.debug(f'GET {url}...')
-        request = requests.get(url)
-        return request.status_code
-
-
-
-
-
     @classmethod
     def prepare_resources_list_to_test(cls, conditions: Callable) -> List[CDNResource]:
         resources_to_test = [r for r in cls.resources if conditions(r)]
         if not resources_to_test:
             pytest.fail(f'No resources found to test disabled edge_cache_settings')
         return resources_to_test
-
-    @staticmethod
-    def resource_is_active(resource: CDNResource) -> bool:
-        return resource.active
-
-    @classmethod
-    def resource_is_not_active(cls, resource: CDNResource) -> bool:
-        return not cls.resource_is_active(resource)
-
-    @classmethod
-    def resource_is_active_and_no_acl(cls, resource: CDNResource) -> bool:
-        return all(
-            (
-                cls.resource_is_active(resource),
-                resource.options,
-                not resource.options.ip_address_acl or not resource.options.ip_address_acl.enabled,
-            )
-        )
-
-    @classmethod
-    def resource_is_active_and_no_acl_and_cache_enabled(cls, resource: CDNResource) -> bool:
-        return all(
-            (
-                cls.resource_is_active_and_no_acl(resource),
-                resource.options.edge_cache_settings,
-            )
-        )
-
-    @classmethod
-    def resource_is_active_and_no_acl_and_ttl(cls, resource: CDNResource) -> bool:
-        return all(
-            (
-                cls.resource_is_active_and_no_acl_and_cache_enabled(resource),
-                resource.options.edge_cache_settings.enabled,
-            )
-        )
-
-    @classmethod
-    def resource_is_active_and_no_acl_and_short_ttl(cls, resource: CDNResource) -> bool:
-        return all(
-            (
-                cls.resource_is_active_and_no_acl_and_ttl(resource),
-                resource.options.edge_cache_settings.default_value == str(SHORT_TTL)
-            )
-        )
 
 
 
@@ -590,19 +535,19 @@ class TestCDN:
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_active_resources(self):
-        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_active)
+        resources_to_test = self.prepare_resources_list_to_test(resource_is_active)
 
         for resource in resources_to_test:
-            request_code = self.http_get_resource(resource)
+            request_code = http_get_url(f'http://{resource.cname}')
             assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_not_active_resources(self):
-        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_not_active)
+        resources_to_test = self.prepare_resources_list_to_test(resource_is_not_active)
 
         for resource in resources_to_test:
-            request_code = self.http_get_resource(resource)
+            request_code = http_get_url(f'http://{resource.cname}')
             assert request_code == 404, f'CDN resource {request_code}, should be 404'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
@@ -625,7 +570,9 @@ class TestCDN:
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_revalidate_out_of_ttl(self):
 
-        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_active_and_no_acl_and_short_ttl)
+        resources_to_test = self.prepare_resources_list_to_test(
+            resource_is_active_and_no_acl_and_with_ttl(ttl=SHORT_TTL)
+        )
 
         assert self.method_to_curl_resources(
             resources=resources_to_test
@@ -635,7 +582,9 @@ class TestCDN:
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_revalidate_too_early_error(self):
 
-        resources_to_test = self.prepare_resources_list_to_test(self.resource_is_active_and_no_acl_and_short_ttl)
+        resources_to_test = self.prepare_resources_list_to_test(
+            resource_is_active_and_no_acl_and_with_ttl(ttl=SHORT_TTL)
+        )
 
         with pytest.raises(RevalidatedTooEarly):
             self.method_to_curl_resources(resources=resources_to_test, period_of_time=2*SHORT_TTL)
@@ -646,7 +595,7 @@ class TestCDN:
         def filter_to_test(r: CDNResource) -> bool:
             return all(
                 (
-                    self.resource_is_active_and_no_acl_and_ttl(r),
+                    resource_is_active_and_no_acl_and_ttl(r),
                     r.options.edge_cache_settings.default_value == str(LONG_TTL)
 
                 )
@@ -664,7 +613,7 @@ class TestCDN:
         def filter_to_test(r: CDNResource) -> bool:
             return all(
                 (
-                    self.resource_is_active_and_no_acl_and_cache_enabled(r),
+                    resource_is_active_and_no_acl_and_cache_enabled(r),
                     not r.options.edge_cache_settings.enabled,
                 )
             )
@@ -684,7 +633,7 @@ class TestCDN:
         def filter_to_test(r: CDNResource) -> bool:
             return all(
                 (
-                    self.resource_is_active_and_no_acl_and_short_ttl(r),
+                    resource_is_active_and_no_acl_and_with_ttl(ttl=SHORT_TTL)(resource=r),
                     r.options.query_params_options,
                     r.options.query_params_options.ignore_query_string,
                     r.options.query_params_options.ignore_query_string.enabled,
@@ -696,13 +645,13 @@ class TestCDN:
 
         assert self.method_to_curl_resources(resources_to_test, add_query_arg=True)
 
-    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_do_not_ignore_query_string(self):
         def filter_to_test(r: CDNResource) -> bool:
             return all(
                 (
-                    self.resource_is_active_and_no_acl_and_ttl(r),
+                    resource_is_active_and_no_acl_and_ttl(r),
                     r.options.query_params_options,
                     r.options.query_params_options.ignore_query_string,
                     not r.options.query_params_options.ignore_query_string.value,
@@ -714,13 +663,13 @@ class TestCDN:
         with pytest.raises(RevalidatedTooEarly):
             self.method_to_curl_resources(resources_to_test, add_query_arg=True)
 
-    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    # @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_static_header_is_set(self):
         def filter_to_test(r: CDNResource) -> bool:
             return all(
                 (
-                    self.resource_is_active_and_no_acl_and_short_ttl(r),
+                    resource_is_active_and_no_acl_and_with_ttl(ttl=SHORT_TTL)(resource=r),
                     r.options.static_headers,
                     r.options.static_headers.enabled,
                     'param-to-test' in r.options.static_headers.value
