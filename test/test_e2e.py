@@ -23,6 +23,8 @@ from app.utils import ping, http_get_request_through_ip_address, increment, make
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger(__name__)
 
+SKIP_TESTS = False
+
 # TODO: implement negative tests
 
 class RevalidatedTooEarly(Exception): ...
@@ -551,16 +553,16 @@ class TestCDN:
 
 
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     def test_origin_group_created(self):
         if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
             assert self.origin_group.id, 'Origin group not created'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     def test_resources_are_created(self):
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_active_and_not_active_resources(self):
         for resource in self.resources:
@@ -573,7 +575,7 @@ class TestCDN:
             else:  # inactive
                 assert request_code == 404, f'CDN resource {request_code}, should be 404'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_ip_address_acl(self):
         for resource in self.resources:
@@ -589,7 +591,7 @@ class TestCDN:
             else:  # allowed
                 assert request_code != 403, f'CDN resource 403, should be not'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_revalidate_out_of_ttl(self):
 
@@ -599,7 +601,7 @@ class TestCDN:
             resources=resources_to_test
         ), 'Not all statuses were processed correctly'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_revalidate_too_early_error(self):
 
@@ -608,7 +610,7 @@ class TestCDN:
         with pytest.raises(RevalidatedTooEarly):
             self.method_to_curl_resources(resources=resources_to_test, period_of_time=2*SHORT_TTL)
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_do_not_revalidate_within_ttl(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -626,7 +628,7 @@ class TestCDN:
             resources=resources_to_test
         ), 'Not all statuses were processed correctly'
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_disabled(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -646,7 +648,7 @@ class TestCDN:
             response_headers = EdgeResponseHeaders(**response.headers)
             assert not response_headers.cache_status
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_ignore_query_string(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -664,7 +666,7 @@ class TestCDN:
 
         assert self.method_to_curl_resources(resources_to_test, add_query_arg=True)
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_do_not_ignore_query_string(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -682,7 +684,7 @@ class TestCDN:
         with pytest.raises(RevalidatedTooEarly):
             self.method_to_curl_resources(resources_to_test, add_query_arg=True)
 
-    @pytest.mark.skip('FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_static_header_is_set(self):
         def filter_to_test(r: CDNResource) -> bool:
