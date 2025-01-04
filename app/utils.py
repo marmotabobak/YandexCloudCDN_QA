@@ -1,9 +1,10 @@
 import logging
+import subprocess
 import time
+import uuid
 from functools import wraps
 from typing import Callable, Any, Dict, Optional, Generator
-import uuid
-import subprocess
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager

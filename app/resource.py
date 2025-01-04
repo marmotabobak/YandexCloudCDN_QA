@@ -1,13 +1,12 @@
 import json
-import logging
-from typing import Optional, List, Dict, Iterator
+from typing import Iterator
 
 import requests
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
-from app.model import *
 from app.apiprocessor import APIProcessor
-from utils import make_random_8_symbols
+from app.model import *
+from app.utils import make_random_8_symbols
 
 
 class ResourcesAPIProcessor(APIProcessor):

@@ -1,23 +1,24 @@
 import logging
+import os
 import time
+from collections import namedtuple
+from copy import deepcopy
+from datetime import datetime, timedelta
+from enum import Enum
+from functools import wraps
+from typing import Callable, Any, List, Optional
 
 import pytest
 import requests
-import os
-from typing import Callable, Any, List, Optional, Dict, Iterable, Tuple
-from functools import wraps
-from datetime import datetime, timedelta
-from enum import Enum
-from collections import namedtuple
 from pydantic import BaseModel, ConfigDict, Field
-from utils import ping, http_get_request_through_ip_address, increment, make_random_8_symbols
-from copy import  deepcopy
 
+from app.authorization import Authorization
+from app.model import EntityName, APIEntity, EdgeCacheSettings, QueryParamsOptions, EnabledBoolValueBool, \
+    EnabledBoolValueDictStrStr
+from app.model import OriginGroup, Origin, IpAddressAcl, CDNResource
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
-from app.model import OriginGroup, Origin, IpAddressAcl, CDNResource
-from app.authorization import Authorization
-from app.model import EntityName, APIEntity, EdgeCacheSettings, QueryParamsOptions, EnabledBoolValueBool, EnabledBoolValueDictStrStr
+from app.utils import ping, http_get_request_through_ip_address, increment, make_random_8_symbols
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logger = logging.getLogger(__name__)

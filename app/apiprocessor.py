@@ -1,10 +1,12 @@
-from pydantic import BaseModel, ValidationError
-from typing import List, Optional, Dict, Union
-import requests
 import json
-from app.model import CDNResource, EntityName, APIEntity, APIProcessorError, OriginGroup
 import logging
-from utils import repeat_and_sleep, make_query_string_from_args
+from typing import List, Optional, Dict, Union
+
+import requests
+from pydantic import BaseModel, ValidationError
+
+from app.model import CDNResource, EntityName, APIEntity, APIProcessorError, OriginGroup
+from app.utils import repeat_and_sleep, make_query_string_from_args
 
 
 class APIProcessor(BaseModel):

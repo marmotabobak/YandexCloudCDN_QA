@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional, List, Dict
 from enum import Enum
+from typing import Optional, List, Dict
 
 from pydantic import BaseModel, Field, ConfigDict
+
 
 class EntityName(Enum):
     CDN_RESOURCE = 'resource'
