@@ -1,5 +1,7 @@
 import logging
 import os
+import yaml
+
 
 from app.authorization import Authorization
 
@@ -10,17 +12,6 @@ logging.info('Starting service')
 
 def main():
     OAUTH = os.environ['OAUTH']
-    IAM_TOKEN_URL = 'https://iam.api.cloud.yandex.net/iam/v1/tokens'
-
-    API_URL = 'https://cdn.api.cloud.yandex.net/cdn/v1'
-    FOLDER_ID = 'b1gjifkk80hojm6nv42n'
-    ORIGIN_GROUP_ID='5867945351699784427'
-    EXISTING_RESOURCES_IDS = [
-        'cdnroq3y4e74osnivr7e', 'cdnrcblizmcdlwnddrko', 'cdnrqvhjv4tyhbfwimw3', 'cdnr5t2qvpsnaaglie2c',
-        'cdnrpnabfdp7u6drjaua', 'cdnr7bbwrxhguo63wkpl', 'cdnrrausbqmlmhzq6ffp', 'cdnrfvuvfped42dkmyrv',
-        'cdnrcqdphowdoxyxrufs', 'cdnrxcdi4xlyuwp42xfl'
-    ]
-
     authorization = Authorization(oauth=OAUTH, iam_token_url=IAM_TOKEN_URL)
     token = authorization.get_token()
     print(token)
@@ -57,6 +48,13 @@ def main():
     #
 
 if __name__ == '__main__':
-    main()
+    # main()
+    with open('test/config.yaml') as fp:
+        config_dict = yaml.safe_load(fp)
+    print(config_dict)
+
+    from test.model import *
+    config = Config.model_validate(config_dict)
+
 
 

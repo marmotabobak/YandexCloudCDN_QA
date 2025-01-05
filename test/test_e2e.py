@@ -22,7 +22,7 @@ from app.utils import ping, http_get_request_through_ip_address, increment, make
 from test.utils import *
 from test.logger import logger
 
-SKIP_TESTS = True
+SKIP_TESTS = False
 
 # TODO: implement negative tests
 
@@ -38,8 +38,8 @@ class EdgeResponseHeaders(BaseModel):
 HostResponse = namedtuple('HostResponse', 'time, status')
 
 class ResourcesInitializeType(Enum):
-    USE_EXISTING = 'use existing'
-    MAKE_NEW = 'make new'
+    USE_EXISTING = 'use_existing'
+    FROM_SCRATCH = 'from_scratch'
 
 INITIALIZE_TYPE = ResourcesInitializeType.USE_EXISTING
 
@@ -52,8 +52,6 @@ assert (token := authorization.get_token()), 'Error while getting token'
 API_URL = 'https://cdn.api.cloud.yandex.net/cdn/v1'
 ORIGIN_DOMAIN = 'marmota-bobak.ru'
 ORIGIN_FULL_URL = 'http://marmota-bobak.ru'
-RESOURCE_CNAME = 'cdn.marmota-bobak.ru'
-CDN_URL = 'http://cdn.marmota-bobak.ru'
 # FOLDER_ID = os.environ['FOLDER_ID']  #TODO: get from cli args/config
 FOLDER_ID = 'b1gjifkk80hojm6nv42n'
 ORIGIN_GROUP_ID = '5867945351699784427'
@@ -89,6 +87,7 @@ EDGE_CACHE_HOSTS = {
 CURL_FINISH_ONCE_SUCCESS = True
 PROTOCOL = 'http'
 CUSTOM_HEADER = False
+CUSTOM_HEADER_VALUE = 'param-to-test'
 
 
 def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15):
@@ -197,7 +196,7 @@ class TestCDN:
 
         cls.method_to_curl_resources = cls.randomly_curl_resources
 
-        cls.custom_header = make_random_8_symbols() if CUSTOM_HEADER else 'param-to-test'
+        cls.custom_header = make_random_8_symbols() if CUSTOM_HEADER else CUSTOM_HEADER_VALUE
 
         cls.resources_proc = ResourcesAPIProcessor(
             entity_name=EntityName.CDN_RESOURCE,
@@ -325,7 +324,7 @@ class TestCDN:
     def teardown_class(cls):
         logger.info('\n\n--- TEARDOWN ---')
 
-        if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
+        if INITIALIZE_TYPE == ResourcesInitializeType.FROM_SCRATCH:
             logger.info('Deleting items...')
             assert cls.resources_proc.delete_several_items_by_ids([resource.id for resource in cls.resources]), \
                 'Items have not been deleted'
@@ -525,7 +524,7 @@ class TestCDN:
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     def test_origin_group_created(self):
-        if INITIALIZE_TYPE == ResourcesInitializeType.MAKE_NEW:
+        if INITIALIZE_TYPE == ResourcesInitializeType.FROM_SCRATCH:
             assert self.origin_group.id, 'Origin group not created'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
