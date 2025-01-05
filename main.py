@@ -49,12 +49,6 @@ def main():
 
 if __name__ == '__main__':
     # main()
-    with open('test/config.yaml') as fp:
-        config_dict = yaml.safe_load(fp)
-    print(config_dict)
-
-    from test.model import *
-    config = Config.model_validate(config_dict)
-
+    ...
 
 

@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import List
+from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional
 from enum import Enum
+from collections import namedtuple
 
 class YandexCloudAPI(BaseModel):
     iam_token_url: str = Field(..., description='Yandex Cloud url to get iam token')
@@ -61,3 +62,12 @@ class Config(BaseModel):
     yandex_cloud_api: YandexCloudAPI = Field(..., description='')
     api_test_parameters: ApiTestParameters = Field(..., description='')
     existing_resources: ExistingResources = Field(..., description='')
+
+class EdgeResponseHeaders(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    cache_host: str = Field(..., alias='Cache-Host')
+    cache_status: Optional[str] = Field(None, alias='Cache-Status')
+    param_to_test: Optional[str] = Field(None, alias='param-to-test')
+
+HostResponse = namedtuple('HostResponse', 'time, status')

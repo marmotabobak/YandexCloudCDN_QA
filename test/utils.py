@@ -1,9 +1,17 @@
 from app.model import CDNResource
-from typing import Callable, List
+from typing import Callable, Any
+from functools import wraps
 import pytest
 import requests
 from test.logger import logger
+import time
 
+
+class RevalidatedTooEarly(Exception): ...
+
+class ResourceIsNotEqualToExisting(Exception): ...
+
+class ResourceIsNot404(Exception): ...
 
 def resource_is_active(resource: CDNResource) -> bool:
     return resource.active
@@ -54,3 +62,19 @@ def http_get_url(url: str) -> int:
     logger.debug(f'GET {url}...')
     request = requests.get(url)
     return request.status_code
+
+def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15):
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            for i in range(attempts):
+                logger.debug(f'Attempt #{i + 1} of {attempts}...')
+                try:
+                    res = func(*args, **kwargs)
+                    return res
+                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedTooEarly):
+                    logger.debug(f'...failed. Sleeping for {attempt_delay} seconds...')
+                    time.sleep(attempt_delay)
+            pytest.fail('All attempts failed.')
+        return wrapper
+    return decorator
