@@ -12,6 +12,7 @@ api_test_parameters:
   edge_curl_settings:
     periods_to_test: 2
     finish_once_success: True
+    requests_type: "random"
   default_protocol: "http"
   client_headers_settings:
     use_random_headers: False

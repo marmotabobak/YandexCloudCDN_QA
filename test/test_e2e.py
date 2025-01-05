@@ -1,9 +1,12 @@
 import os
+import time
 from copy import deepcopy
 from datetime import datetime, timedelta
-import yaml
+from typing import List, Union, Callable
 
 import pytest
+import requests
+import yaml
 
 from app.authorization import Authorization
 from app.model import EntityName, APIEntity, EdgeCacheSettings, QueryParamsOptions, EnabledBoolValueBool, \
@@ -12,30 +15,56 @@ from app.model import OriginGroup, Origin, IpAddressAcl, CDNResource
 from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
 from app.utils import ping, http_get_request_through_ip_address, increment, make_random_8_symbols
-from test.utils import *
 from test.logger import logger
-from test.model import *
+from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, CheckType, EdgeResponseHeaders
+from test.utils import RevalidatedTooEarly, ResourceIsNotEqualToExisting, URLIsNot404, resource_is_active, \
+    resource_is_not_active, resource_is_active_and_no_acl_and_cache_enabled, resource_is_active_and_no_acl_and_ttl, \
+    resource_is_active_and_no_acl_and_with_ttl, http_get_url, repeat_until_success_or_timeout
 
-# TODO: !True ONLY FOR DEBUG! Make False for Production
-SKIP_CHECKING_RESOURCES_ARE_DEFAULT = True
+# TODO: !True ONLY FOR DEBUG! Use False for Production
+SKIP_CHECK_RESOURCES_ARE_DEFAULT = True
 SKIP_CHECK_EQUAL_TO_EXISTING = False
-SKIP_PINGING_EDGED = False
+SKIP_PING_EDGED = False
 SKIP_UPDATE_RESOURCES = True
-
 SKIP_TESTS = False
 
 OAUTH = os.environ['OAUTH']
 
-
 class TestCDN:
+
     @classmethod
     def setup_class(cls):
+        cls.init_config()
+        cls.init_iam_token()
+        cls.init_attributes()
 
+        logger.info('--- SETUP ---')
+
+        logger.info('Checking origins 200...')
+        if not cls.origin_is_available_with_200():
+            pytest.fail('Origin is not available')
+        logger.info('OK')
+
+        if not SKIP_PING_EDGED:
+            logger.info('Pinging edges...')
+            if edges := cls.get_not_pinged_edges():
+                pytest.fail(f'Edges are not pinged successfully: {edges}')
+            logger.info('OK')
+
+        logger.info(f'Initializing and checking resources for {cls.initialize_duration_check} seconds...')
+        cls.initialize_resources()
+        logger.info('OK')
+
+        logger.info('--- SETUP finished ---')
+
+    @classmethod
+    def init_config(cls):
         with open('test/config.yaml') as fp:
             config_dict = yaml.safe_load(fp)
         cls.config = Config.model_validate(config_dict)
 
         cls.api_url = cls.config.yandex_cloud_api.api_url
+        cls.curl_method = cls.config.api_test_parameters.edge_curl_settings.requests_type
         cls.use_random_headers = cls.config.api_test_parameters.client_headers_settings.use_random_headers
         cls.custom_header_value = cls.config.api_test_parameters.client_headers_settings.custom_header_value
         cls.initialize_duration_check = (cls.config.api_test_parameters.setup_initialize_resources_check.
@@ -50,17 +79,21 @@ class TestCDN:
         cls.long_ttl = cls.config.api_test_parameters.ttl_settings.long_ttl
         cls.periods_to_test = cls.config.api_test_parameters.edge_curl_settings.periods_to_test
         cls.finish_once_success = cls.config.api_test_parameters.edge_curl_settings.finish_once_success
+        cls.iam_token_url = cls.config.yandex_cloud_api.iam_token_url
+        cls.existing_cdn_resources = cls.config.existing_resources.cdn_resources
+        cls.existing_origin = cls.config.existing_resources.origin
+        cls.edge_cache_hosts = cls.config.existing_resources.edge_cache_hosts
 
+    @classmethod
+    def init_attributes(cls):
         cls.resources = []
         cls.cdn_cnames = []  # for making new resources only
-
-        cls.method_to_curl_resources = cls.randomly_curl_resources
-
         cls.custom_header = make_random_8_symbols() if cls.use_random_headers else cls.custom_header_value
 
-        authorization = Authorization(oauth=OAUTH, iam_token_url=cls.config.yandex_cloud_api.iam_token_url)
-        assert (token := authorization.get_token()), 'Error while getting token'
-        cls.token = token
+        if cls.curl_method == RequestsType.targeted:
+            cls.method_to_curl_resources = cls.targeted_http_curl_resources
+        else:
+            cls.method_to_curl_resources = cls.randomly_curl_resources
 
         cls.resources_proc = ResourcesAPIProcessor(
             entity_name=EntityName.CDN_RESOURCE,
@@ -70,33 +103,31 @@ class TestCDN:
             token=cls.token
         )
 
-        logger.info('--- SETUP ---')
-
-        logger.info('Checking origins 200...')
-        if not cls.origin_is_available_with_200():
-            pytest.fail('Origin is not available')
-        logger.info('OK')
-
-        if not SKIP_PINGING_EDGED:
-            logger.info('Pinging edges...')
-            if edges := cls.get_not_pinged_edges():
-                pytest.fail(f'Edges are not pinged successfully: {edges}')
-            logger.info('OK')
-
-        logger.info(f'Initializing and checking resources for {cls.initialize_duration_check} seconds...')
-        cls.initialize_resources()
-        logger.info('OK')
-
-        logger.info('--- SETUP finished ---')
+    @classmethod
+    def init_iam_token(cls):
+        authorization = Authorization(oauth=OAUTH, iam_token_url=cls.iam_token_url)
+        assert (token := authorization.get_token()), 'Error while getting token'
+        cls.token = token
 
     @classmethod
     @repeat_until_success_or_timeout()
-    def resources_are_not_alive_for_period_of_time(
+    def check_entities_for_period_of_time(
         cls,
-        cnames: List[str],
+        entities_to_check: Union[List[str], List[CDNResource]],
+        check_type: CheckType,
         duration_to_success: int = None,
         attempt_sleep: int = None
     ) -> bool:
+
+        if check_type == CheckType.CNAME_404:
+            entity_text = 'cnames are 404'
+            method_to_check = cls.cname_is_404
+        elif check_type == CheckType.RESOURCE_EQUAL:
+            entity_text = 'resources are equal to existing'
+            method_to_check = cls.resource_is_equal_to_existing
+        else:
+            logger.error('Unknown check_type')
+            return False
 
         if duration_to_success is None:
             duration_to_success = cls.initialize_duration_check
@@ -107,69 +138,39 @@ class TestCDN:
         now = datetime.now()
         finish_time = now + timedelta(seconds=duration_to_success)
 
-        logger.info(f'Checking resources availability for {duration_to_success} seconds...')
+        logger.info(f'Checking {entity_text} for {duration_to_success} seconds...')
         while True:
             logger.debug(f'Attempt #{attempt}')
-            for cname in cnames:
-                try:
-                    logger.debug(f'GET {cname}...')
-                    request = requests.get(url='http://' + cname)
-                    if request.status_code != 404:  # TODO: think about this check
-                        logger.error(f'false (status code {request.status_code})')
-                        raise ResourceIsNot404()
-                    logger.info('ok (status 404)')
-                except requests.exceptions.ConnectionError as e:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
-                    logger.error(e)
-                    return False
+            for entity in entities_to_check:
+                method_to_check(entity)
+                logger.debug('...OK')
 
-            logger.debug(f'Intermediate success: all resources are 404.')
+            logger.debug(f'Intermediate success: all {entity_text}')
             if (now := datetime.now()) < finish_time:
                 seconds_left = (finish_time - now).seconds
-                logger.debug(f'{seconds_left} seconds left')
-                logger.debug(f'Sleeping for {attempt_sleep} seconds...')
+                logger.debug(f'{seconds_left} seconds left. Sleeping for {attempt_sleep} seconds...')
                 time.sleep(attempt_sleep)
                 attempt += 1
             else:
                 return True
-
 
     @classmethod
-    @repeat_until_success_or_timeout()
-    def resources_are_equal_for_period_of_time(
-        cls,
-        resources_proc: ResourcesAPIProcessor,
-        resources: List[CDNResource],
-        duration_to_success: int = None,
-        attempt_sleep: int = None
-    ) -> bool:
+    def cname_is_404(cls, cname: str) -> None:
+        try:
+            logger.debug(f'GET {cname}...')
+            request = requests.get(url=f'{cls.protocol}://{cname}')
+            if request.status_code != 404:  # TODO: think about this check
+                logger.error(f'Status code {request.status_code})')
+                raise URLIsNot404()
+        except requests.exceptions.ConnectionError as e:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
+            logger.error(e)
+            raise e
 
-        if duration_to_success is None:
-            duration_to_success = cls.initialize_duration_check
-        if attempt_sleep is None:
-            attempt_sleep = cls.initialize_sleep_between_attempts
-
-        attempt = 1
-        now = datetime.now()
-        finish_time = now + timedelta(seconds=duration_to_success)
-
-        logger.info(f'Checking resources equality for {duration_to_success} seconds...')
-        while True:
-            logger.debug(f'Attempt #{attempt}')
-            for resource in resources:
-                logger.debug(f'Comparing resource [{resource.id}]...')
-                if not resources_proc.compare_item_to_existing(resource):
-                    raise ResourceIsNotEqualToExisting()
-                logger.debug('OK')
-
-            logger.debug(f'Intermediate success: all resources are equal to existing ones')
-            if (now := datetime.now()) < finish_time:
-                seconds_left = (finish_time - now).seconds
-                logger.debug(f'{seconds_left} seconds left')
-                logger.debug(f'Sleeping for {attempt_sleep} seconds...')
-                time.sleep(attempt_sleep)
-                attempt += 1
-            else:
-                return True
+    @classmethod
+    def resource_is_equal_to_existing(cls, resource: CDNResource) -> None:
+        logger.debug(f'Comparing resource [{resource.id}]...')
+        if not cls.resources_proc.compare_item_to_existing(resource):
+            raise ResourceIsNotEqualToExisting()
 
     @classmethod
     def origin_is_available_with_200(cls) -> bool:
@@ -187,17 +188,20 @@ class TestCDN:
     def initialize_resources_from_existing(cls):
         #TODO: make resources from yaml and then compare them with what really in Cloud are
 
-        for cdn_resource in cls.config.existing_resources.cdn_resources:
+        for cdn_resource in cls.existing_cdn_resources:
             resource = cls.resources_proc.make_default_cdn_resource(
                 resource_id=cdn_resource.id,
                 folder_id=cls.folder_id,
                 cname=cdn_resource.cname,
-                origin_group_id=cls.config.existing_resources.origin.origin_group_id,
+                origin_group_id=cls.existing_origin.origin_group_id,
             )
             cls.resources.append(resource)
 
-        if not SKIP_CHECKING_RESOURCES_ARE_DEFAULT:
-            if not cls.resources_are_equal_for_period_of_time(cls.resources_proc, cls.resources):
+        if not SKIP_CHECK_RESOURCES_ARE_DEFAULT:
+            if not cls.check_entities_for_period_of_time(
+                    check_type=CheckType.RESOURCE_EQUAL,
+                    entities_to_check=cls.resources
+            ):
                 pytest.fail('Resources are not default')
 
         cls.resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
@@ -252,7 +256,7 @@ class TestCDN:
         cls.origin_group = OriginGroup(origins=[cls.origin, ], name='test-origin', folder_id=cls.folder_id)
         cls.origin_groups_proc.create_item(item=cls.origin_group)
 
-        if not cls.resources_are_not_alive_for_period_of_time(cls.cdn_cnames):
+        if not cls.check_entities_for_period_of_time(check_type=CheckType.CNAME_404, entities_to_check=cls.cdn_cnames):
             pytest.fail('Setup has failed')
 
         logger.info(f'Success: all resources have been 404 for {cls.initialize_duration_check} seconds.')
@@ -289,6 +293,25 @@ class TestCDN:
     def test_setup(cls):
         assert True
 
+    @classmethod
+    def init_parameters_for_curl(
+            cls,
+            period_of_time: int = None,
+            periods_count: int = None,
+            finish_once_success: bool = None
+    ):
+        if period_of_time is None:
+            period_of_time = cls.short_ttl
+        if periods_count is None:
+            periods_count = cls.periods_to_test
+        if finish_once_success is None:
+            finish_once_success = cls.finish_once_success
+
+        time_to_test = periods_count * period_of_time
+        start_time = time.time()
+
+        return period_of_time, periods_count, finish_once_success, time_to_test, start_time
+
     # TODO: make random check but with return once success
     # TODO: make async otherwise too few requests and needs too many periods_count (such as 5) to assert successfully
     # NB! better use targeted requests to specific cache hosts
@@ -305,20 +328,14 @@ class TestCDN:
 
         if protocol is None:
             protocol = cls.protocol
-        if period_of_time is None:
-            period_of_time = cls.short_ttl
-        if periods_count is None:
-            periods_count = cls.periods_to_test
-        if finish_once_success is None:
-            finish_once_success = cls.finish_once_success
 
-        start_time = time.time()
         resources_statuses = {}
         query_generator = increment()
+        period_of_time, periods_count, finish_once_success, time_to_test, start_time = cls.init_parameters_for_curl(
+            period_of_time, periods_count, finish_once_success
+        )
 
-        time_to_test = periods_count * period_of_time
         logger.info(f'GET resources [{[r.cname for r in resources]}] for {time_to_test} seconds...')
-
         while time.time() < start_time + time_to_test:
             for resource in resources:
                 url = f'{protocol}://{resource.cname}'
@@ -373,13 +390,6 @@ class TestCDN:
             finish_once_success: bool = None
     ) -> bool:
 
-        if period_of_time is None:
-            period_of_time = cls.short_ttl
-        if periods_count is None:
-            periods_count = cls.periods_to_test
-        if finish_once_success is None:
-            finish_once_success = cls.finish_once_success
-
         resources_statuses = {}
         resources_statuses_template = {}
         query_generator = increment()
@@ -403,10 +413,11 @@ class TestCDN:
                 resources_statuses[resource.id][edge_host['url']] = [host_response, ]
                 resources_statuses_template[resource.id][edge_host['url']] = None
 
-        time_to_test = periods_count * period_of_time
-        logger.info(f'GET resources [{[r.cname for r in resources]}] for up to {time_to_test} seconds...')
+        period_of_time, periods_count, finish_once_success, time_to_test, start_time = (
+            cls.init_parameters_for_curl(period_of_time, periods_count, finish_once_success)
+        )
 
-        start_time = time.time()
+        logger.info(f'GET resources [{[r.cname for r in resources]}] for up to {time_to_test} seconds...')
         while time.time() < start_time + time_to_test:
             for resource in resources:
                 if resource.id in resources_statuses_template:
@@ -503,7 +514,7 @@ class TestCDN:
         resources_to_test = self.prepare_resources_list_to_test(resource_is_active)
 
         for resource in resources_to_test:
-            request_code = http_get_url(f'http://{resource.cname}')
+            request_code = http_get_url(f'{self.protocol}://{resource.cname}')
             assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
@@ -512,14 +523,14 @@ class TestCDN:
         resources_to_test = self.prepare_resources_list_to_test(resource_is_not_active)
 
         for resource in resources_to_test:
-            request_code = http_get_url(f'http://{resource.cname}')
+            request_code = http_get_url(f'{self.protocol}://{resource.cname}')
             assert request_code == 404, f'CDN resource {request_code}, should be 404'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
     def test_ip_address_acl(self):
         for resource in self.resources:
-            url = f'http://{resource.cname}'
+            url = f'{self.protocol}://{resource.cname}'
             logger.info(f'GET {url}...')
             request = requests.get(url)
             request_code = request.status_code
@@ -538,10 +549,7 @@ class TestCDN:
         resources_to_test = self.prepare_resources_list_to_test(
             resource_is_active_and_no_acl_and_with_ttl(ttl=self.short_ttl)
         )
-
-        assert self.method_to_curl_resources(
-            resources=resources_to_test
-        ), 'Not all statuses were processed correctly'
+        assert self.method_to_curl_resources(resources=resources_to_test), 'Not all statuses were processed correctly'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @repeat_until_success_or_timeout()
@@ -587,7 +595,7 @@ class TestCDN:
 
         logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
         for resource in resources_to_test:
-            url = f'http://{resource.cname}'
+            url = f'{self.protocol}://{resource.cname}'
             response = requests.get(url)
             response_headers = EdgeResponseHeaders(**response.headers)
             assert not response_headers.cache_status

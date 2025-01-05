@@ -16,9 +16,14 @@ class TTLSettings(BaseModel):
     short_ttl: int = Field(..., description='Edge cache "fast" ttl to check edge revalidates')
     long_ttl: int = Field(..., description='Edge cache "long" ttl to check edge does not revalidate')
 
+class RequestsType(str, Enum):
+    random = 'random'
+    targeted = 'targeted'
+
 class EdgeCurlSettings(BaseModel):
     periods_to_test: int = Field(..., description='Number of attempts to curl edges for testing')
     finish_once_success: bool = Field(..., description='Successfully stop test if any of edges successfully passed')
+    requests_type: RequestsType
 
 class DefaultProtocol(str, Enum):
     http = 'http'
@@ -71,3 +76,7 @@ class EdgeResponseHeaders(BaseModel):
     param_to_test: Optional[str] = Field(None, alias='param-to-test')
 
 HostResponse = namedtuple('HostResponse', 'time, status')
+
+class CheckType(str, Enum):
+    CNAME_404 = 'CNAME404'
+    RESOURCE_EQUAL = 'RESOURCE_EQUAL'
