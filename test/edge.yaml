@@ -18,62 +18,30 @@ api_test_parameters:
   client_headers_settings:
     use_random_headers: False
     custom_header_value: 'param-to-test'
-  resources_initialize_method: "use_existing"
+  resources_initialize_method: "from_scratch"
 
 resources:
-  folder_id: "b1gjifkk80hojm6nv42n"
+  folder_id: "b1ghqoihr671ogin2pq5"
   origin:
-    domain: "marmota-bobak.ru"
+    domain: "marmotabobak.ru"
   cdn_resources:
     -
-      cname: "yccdn-qa-1.marmota-bobak.ru"
+      cname: "edge-qa-1.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-2.marmota-bobak.ru"
+      cname: "edge-qa-2.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-3.marmota-bobak.ru"
+      cname: "edge-qa-3.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-4.marmota-bobak.ru"
+      cname: "edge-qa-4.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-5.marmota-bobak.ru"
+      cname: "edge-qa-5.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-6.marmota-bobak.ru"
+      cname: "edge-qa-6.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-7.marmota-bobak.ru"
+      cname: "edge-qa-7.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-8.marmota-bobak.ru"
+      cname: "edge-qa-8.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-9.marmota-bobak.ru"
+      cname: "edge-qa-9.marmota-bobak.ru"
     -
-      cname: "yccdn-qa-10.marmota-bobak.ru"
-
-  edge_cache_hosts:
-    -
-      url: "m9-srv01.yccdn.cloud.yandex.net"
-      ip_address: "188.72.104.2"
-    -
-      url: "m9-srv02.yccdn.cloud.yandex.net"
-      ip_address: "188.72.104.3"
-    -
-      url: "m9-srv03.yccdn.cloud.yandex.net"
-      ip_address: "188.72.104.4"
-    -
-      url: "m9-srv04.yccdn.cloud.yandex.net"
-      ip_address: "188.72.104.5"
-    -
-      url: "m9-srv05.yccdn.cloud.yandex.net"
-      ip_address: "188.72.104.6"
-    -
-      url: "mar-srv01.yccdn.cloud.yandex.net"
-      ip_address: "188.72.105.2"
-    -
-      url: "mar-srv02.yccdn.cloud.yandex.net"
-      ip_address: "188.72.105.3"
-    -
-      url: "mar-srv03.yccdn.cloud.yandex.net"
-      ip_address: "188.72.105.4"
-    -
-      url: "mar-srv04.yccdn.cloud.yandex.net"
-      ip_address: "188.72.105.5"
-    -
-      url: "mar-srv05.yccdn.cloud.yandex.net"
-      ip_address: "188.72.105.6"
+      cname: "edge-qa-10.marmota-bobak.ru"

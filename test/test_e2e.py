@@ -48,7 +48,7 @@ class TestCDN:
             pytest.fail('Origin is not available')
         logger.info('OK')
 
-        if not SKIP_PING_EDGED:
+        if not SKIP_PING_EDGED and cls.edge_cache_hosts:
             logger.info('Pinging edges...')
             if edges := cls.get_not_pinged_edges():
                 pytest.fail(f'Edges are not pinged successfully: {edges}')
@@ -83,15 +83,13 @@ class TestCDN:
         cls.periods_to_test = cls.config.api_test_parameters.edge_curl_settings.periods_to_test
         cls.finish_once_success = cls.config.api_test_parameters.edge_curl_settings.finish_once_success
         cls.iam_token_url = cls.config.yandex_cloud_api.iam_token_url
-        cls.existing_cdn_resources = cls.config.resources.cdn_resources
-        cls.existing_origin = cls.config.resources.origin
+        cls.cdn_resources = cls.config.resources.cdn_resources
+        cls.origin = cls.config.resources.origin
         cls.edge_cache_hosts = cls.config.resources.edge_cache_hosts
         cls.ttl_error_rate = cls.config.api_test_parameters.ttl_settings.error_rate
 
     @classmethod
     def init_attributes(cls):
-        cls.resources = []
-        cls.cdn_cnames = []  # for making new resources only
         cls.custom_header = make_random_8_symbols() if cls.use_random_headers else cls.custom_header_value
 
         if cls.curl_method == RequestsType.targeted:
@@ -192,44 +190,46 @@ class TestCDN:
     def initialize_resources_from_existing(cls):
         #TODO: make resources from yaml and then compare them with what really in Cloud are
 
-        for cdn_resource in cls.existing_cdn_resources:
+        cdn_resources = []
+        for cdn_resource in cls.cdn_resources:
             resource = cls.resources_proc.make_default_cdn_resource(
                 resource_id=cdn_resource.id,
                 folder_id=cls.folder_id,
                 cname=cdn_resource.cname,
-                origin_group_id=cls.existing_origin.origin_group_id,
+                origin_group_id=cls.origin.origin_group_id,
             )
-            cls.resources.append(resource)
+            cdn_resources.append(resource)
+        cls.cdn_resources = cdn_resources
 
         if not SKIP_CHECK_RESOURCES_ARE_DEFAULT:
             if not cls.check_entities_for_period_of_time(
                     check_type=CheckType.RESOURCE_EQUAL,
-                    entities_to_check=cls.resources
+                    entities_to_check=cls.cdn_resources
             ):
                 pytest.fail('Resources are not default')
 
-        cls.resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
+        cls.cdn_resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
 
-        cls.resources[1].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(cls.short_ttl))  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
+        cls.cdn_resources[1].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(cls.short_ttl))  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
 
-        cls.resources[2].options.edge_cache_settings = EdgeCacheSettings(enabled=False, default_value=str(cls.short_ttl))  # 'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru'
+        cls.cdn_resources[2].options.edge_cache_settings = EdgeCacheSettings(enabled=False, default_value=str(cls.short_ttl))  # 'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru'
 
-        cls.resources[3].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=True))  # 'cdnr5t2qvpsnaaglie2c': 'yccdn-qa-4.marmota-bobak.ru'
+        cls.cdn_resources[3].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=True))  # 'cdnr5t2qvpsnaaglie2c': 'yccdn-qa-4.marmota-bobak.ru'
 
-        cls.resources[4].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=False))  # 'cdnrpnabfdp7u6drjaua': 'yccdn-qa-5.marmota-bobak.ru'
+        cls.cdn_resources[4].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=False))  # 'cdnrpnabfdp7u6drjaua': 'yccdn-qa-5.marmota-bobak.ru'
 
-        cls.resources[5].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(cls.long_ttl))
+        cls.cdn_resources[5].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(cls.long_ttl))
 
-        cls.resources[6].options.static_headers = EnabledBoolValueDictStrStr(enabled=True, value={'param-to-test': cls.custom_header})
+        cls.cdn_resources[6].options.static_headers = EnabledBoolValueDictStrStr(enabled=True, value={'param-to-test': cls.custom_header})
 
-        cls.resources[9].options.ip_address_acl = IpAddressAcl(    # 'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
+        cls.cdn_resources[9].options.ip_address_acl = IpAddressAcl(    # 'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
             enabled=True,
             excepted_values=['0.0.0.0/32', ],
             policy_type='POLICY_TYPE_ALLOW'
         )
 
         if not SKIP_UPDATE_RESOURCES:
-            for resource in cls.resources:
+            for resource in cls.cdn_resources:
                 cls.resources_proc.update(resource)
 
         if not SKIP_CHECK_EQUAL_TO_EXISTING:
@@ -238,7 +238,7 @@ class TestCDN:
 
     @classmethod
     def resources_are_equal_to_existing(cls) -> bool:
-        for resource in cls.resources:
+        for resource in cls.cdn_resources:
             logger.debug(f'Checking resource: {resource}')
             if not cls.resources_proc.compare_item_to_existing(resource):
                 logger.error(f'Resource [{resource.id}] with cname {resource.cname} is not same as existing')
@@ -265,14 +265,14 @@ class TestCDN:
 
         logger.info(f'Success: all resources have been 404 for {cls.initialize_duration_check} seconds.')
 
-        for cname in cls.cdn_cnames:
+        for cdn_resource in cls.cdn_resources:
             resource = cls.resources_proc.make_default_cdn_resource(
                 folder_id=cls.folder_id,
-                cname=cname,
+                cname=cdn_resource['cname'],
                 origin_group_id=cls.origin_group.id
             )
             cls.resources_proc.create_item(resource)
-            cls.resources.append(resource)
+            cls.cdn_resources.append(resource)
 
     @classmethod
     def teardown_class(cls):
@@ -280,7 +280,7 @@ class TestCDN:
 
         if cls.initialize_type == ResourcesInitializeMethod.from_scratch:
             logger.info('Deleting items...')
-            assert cls.resources_proc.delete_several_items_by_ids([resource.id for resource in cls.resources]), \
+            assert cls.resources_proc.delete_several_items_by_ids([resource.id for resource in cls.cdn_resources]), \
                 'Items have not been deleted'
             assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'
         elif cls.initialize_type == ResourcesInitializeMethod.use_existing:
@@ -394,6 +394,9 @@ class TestCDN:
             finish_once_success: bool = None
     ) -> bool:
 
+        if not cls.edge_cache_hosts:
+            pytest.fail('Edge cache hosts should be defined for targeted curl')
+
         resources_statuses = {}
         resources_statuses_template = {}
         query_generator = increment()
@@ -498,7 +501,7 @@ class TestCDN:
 
     @classmethod
     def prepare_resources_list_to_test(cls, conditions: Callable) -> List[CDNResource]:
-        resources_to_test = [r for r in cls.resources if conditions(r)]
+        resources_to_test = [r for r in cls.cdn_resources if conditions(r)]
         if not resources_to_test:
             pytest.fail(f'No resources found to test disabled edge_cache_settings')
         return resources_to_test
@@ -513,7 +516,7 @@ class TestCDN:
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     def test_resources_are_created(self):
-        assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
+        assert self.cdn_resources and all(r.id for r in self.cdn_resources), 'CDN resources not created'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @allure.feature('Active resource')
@@ -544,7 +547,7 @@ class TestCDN:
     @allure.feature('IP ACL')
     @repeat_until_success_or_timeout()
     def test_ip_address_acl(self):
-        for resource in self.resources:
+        for resource in self.cdn_resources:
             url = f'{self.protocol}://{resource.cname}'
             logger.info(f'GET {url}...')
             request = requests.get(url)

@@ -64,7 +64,7 @@ class Resources(BaseModel):
     folder_id: str = Field(..., description='')
     origin: Origin = Field(..., description='')
     cdn_resources: List[CDNResource] = Field(..., description='')
-    edge_cache_hosts: List[EdgeCacheHost] = Field(..., description='')
+    edge_cache_hosts: Optional[List[EdgeCacheHost]] = Field(None, description='')
 
 class Config(BaseModel):
     yandex_cloud_api: YandexCloudAPI = Field(..., description='')
