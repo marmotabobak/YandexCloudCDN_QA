@@ -1,17 +1,23 @@
-from app.model import CDNResource
-from typing import Callable, Any
+import time
 from functools import wraps
+from typing import Callable, Any
+
 import pytest
 import requests
+
+from app.model import CDNResource
 from test.logger import logger
-import time
 
 
-class RevalidatedTooEarly(Exception): ...
+class RevalidatedBeforeTTL(Exception): ...
 
 class ResourceIsNotEqualToExisting(Exception): ...
 
 class URLIsNot404(Exception): ...
+
+
+
+
 
 def resource_is_active(resource: CDNResource) -> bool:
     return resource.active
@@ -72,8 +78,8 @@ def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15)
                 try:
                     res = func(*args, **kwargs)
                     return res
-                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedTooEarly):
-                    logger.debug(f'...failed. Sleeping for {attempt_delay} seconds...')
+                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedBeforeTTL) as e:
+                    logger.debug(f'...failed. Error: [{e}]. Sleeping for {attempt_delay} seconds...')
                     time.sleep(attempt_delay)
             pytest.fail('All attempts failed.')
         return wrapper

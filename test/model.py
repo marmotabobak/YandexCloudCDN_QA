@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
-from enum import Enum
 from collections import namedtuple
+from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, ConfigDict
+
 
 class YandexCloudAPI(BaseModel):
     iam_token_url: str = Field(..., description='Yandex Cloud url to get iam token')
@@ -15,6 +17,7 @@ class SetupInitializeResourcesCheck(BaseModel):
 class TTLSettings(BaseModel):
     short_ttl: int = Field(..., description='Edge cache "fast" ttl to check edge revalidates')
     long_ttl: int = Field(..., description='Edge cache "long" ttl to check edge does not revalidate')
+    error_rate: float = Field(..., description='Acceptable margin of error to calculate TTL revalidation period')
 
 class RequestsType(str, Enum):
     random = 'random'
@@ -46,18 +49,18 @@ class ApiTestParameters(BaseModel):
     resources_initialize_method: str = Field(..., description='')
 
 class Origin(BaseModel):
-    origin_group_id: str = Field(..., description='')
+    origin_group_id: Optional[str] = Field(None, description='')
     domain: str = Field(..., description='')
 
 class CDNResource(BaseModel):
-    id: str = Field(..., description='')
+    id: Optional[str] = Field(None, description='')
     cname: str = Field(..., description='')
 
 class EdgeCacheHost(BaseModel):
-    url: str = Field(..., description='')
+    url: Optional[str] = Field(None, description='')
     ip_address: str = Field(..., description='')
 
-class ExistingResources(BaseModel):
+class Resources(BaseModel):
     folder_id: str = Field(..., description='')
     origin: Origin = Field(..., description='')
     cdn_resources: List[CDNResource] = Field(..., description='')
@@ -66,7 +69,7 @@ class ExistingResources(BaseModel):
 class Config(BaseModel):
     yandex_cloud_api: YandexCloudAPI = Field(..., description='')
     api_test_parameters: ApiTestParameters = Field(..., description='')
-    existing_resources: ExistingResources = Field(..., description='')
+    resources: Resources = Field(..., description='')
 
 class EdgeResponseHeaders(BaseModel):
     model_config = ConfigDict(populate_by_name=True)

@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import List, Union, Callable
 
+import allure
 import pytest
 import requests
 import yaml
@@ -17,18 +18,20 @@ from app.resource import ResourcesAPIProcessor
 from app.utils import ping, http_get_request_through_ip_address, increment, make_random_8_symbols
 from test.logger import logger
 from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, CheckType, EdgeResponseHeaders
-from test.utils import RevalidatedTooEarly, ResourceIsNotEqualToExisting, URLIsNot404, resource_is_active, \
+from test.utils import RevalidatedBeforeTTL, ResourceIsNotEqualToExisting, URLIsNot404, resource_is_active, \
     resource_is_not_active, resource_is_active_and_no_acl_and_cache_enabled, resource_is_active_and_no_acl_and_ttl, \
     resource_is_active_and_no_acl_and_with_ttl, http_get_url, repeat_until_success_or_timeout
 
 # TODO: !True ONLY FOR DEBUG! Use False for Production
 SKIP_CHECK_RESOURCES_ARE_DEFAULT = True
 SKIP_CHECK_EQUAL_TO_EXISTING = False
-SKIP_PING_EDGED = False
+SKIP_PING_EDGED = True
 SKIP_UPDATE_RESOURCES = True
 SKIP_TESTS = False
 
 OAUTH = os.environ['OAUTH']
+CONFIG_PATH = 'test/config.yaml'
+# CONFIG_PATH = 'test/edge.yaml'
 
 class TestCDN:
 
@@ -59,7 +62,7 @@ class TestCDN:
 
     @classmethod
     def init_config(cls):
-        with open('test/config.yaml') as fp:
+        with open(CONFIG_PATH) as fp:
             config_dict = yaml.safe_load(fp)
         cls.config = Config.model_validate(config_dict)
 
@@ -71,18 +74,19 @@ class TestCDN:
                                          total_duration_seconds)
         cls.initialize_sleep_between_attempts = (cls.config.api_test_parameters.setup_initialize_resources_check.
                                                  sleep_duration_between_attempts)
-        cls.origin_domain = cls.config.existing_resources.origin.domain
+        cls.origin_domain = cls.config.resources.origin.domain
         cls.protocol = cls.config.api_test_parameters.default_protocol.value
         cls.initialize_type = cls.config.api_test_parameters.resources_initialize_method
-        cls.folder_id = cls.config.existing_resources.folder_id
+        cls.folder_id = cls.config.resources.folder_id
         cls.short_ttl = cls.config.api_test_parameters.ttl_settings.short_ttl
         cls.long_ttl = cls.config.api_test_parameters.ttl_settings.long_ttl
         cls.periods_to_test = cls.config.api_test_parameters.edge_curl_settings.periods_to_test
         cls.finish_once_success = cls.config.api_test_parameters.edge_curl_settings.finish_once_success
         cls.iam_token_url = cls.config.yandex_cloud_api.iam_token_url
-        cls.existing_cdn_resources = cls.config.existing_resources.cdn_resources
-        cls.existing_origin = cls.config.existing_resources.origin
-        cls.edge_cache_hosts = cls.config.existing_resources.edge_cache_hosts
+        cls.existing_cdn_resources = cls.config.resources.cdn_resources
+        cls.existing_origin = cls.config.resources.origin
+        cls.edge_cache_hosts = cls.config.resources.edge_cache_hosts
+        cls.ttl_error_rate = cls.config.api_test_parameters.ttl_settings.error_rate
 
     @classmethod
     def init_attributes(cls):
@@ -310,7 +314,7 @@ class TestCDN:
         time_to_test = periods_count * period_of_time
         start_time = time.time()
 
-        return period_of_time, periods_count, finish_once_success, time_to_test, start_time
+        return period_of_time, finish_once_success, time_to_test, start_time
 
     # TODO: make random check but with return once success
     # TODO: make async otherwise too few requests and needs too many periods_count (such as 5) to assert successfully
@@ -331,7 +335,7 @@ class TestCDN:
 
         resources_statuses = {}
         query_generator = increment()
-        period_of_time, periods_count, finish_once_success, time_to_test, start_time = cls.init_parameters_for_curl(
+        period_of_time, finish_once_success, time_to_test, start_time = cls.init_parameters_for_curl(
             period_of_time, periods_count, finish_once_success
         )
 
@@ -355,7 +359,7 @@ class TestCDN:
                 ).setdefault(response_headers.cache_host, []).append(host_response)
 
                 if finish_once_success:
-                    if cls.resource_is_correctly_processed_by_edge(
+                    if cls.cache_is_revalidated_during_ttl(
                             statuses=resources_statuses[resource.id][response_headers.cache_host],
                             period_of_time=period_of_time
                     ):
@@ -368,7 +372,7 @@ class TestCDN:
 
         for resource_id, resource_statuses in resources_statuses.items():
             for host_name, host_responses in resource_statuses.items():
-                if cls.resource_is_correctly_processed_by_edge(statuses=host_responses, period_of_time=period_of_time):
+                if cls.cache_is_revalidated_during_ttl(statuses=host_responses, period_of_time=period_of_time):
                     resources_statuses_copy[resource_id].pop(host_name)
             if not resources_statuses_copy[resource_id]:
                 resources_statuses_copy.pop(resource_id)
@@ -397,11 +401,12 @@ class TestCDN:
         for resource in resources:
             resources_statuses[resource.id] = {}
             resources_statuses_template[resource.id] = {}
-            for edge_host in cls.config.existing_resources.edge_cache_hosts:
+            for edge_host in cls.edge_cache_hosts:
 
                 url = resource.cname
                 if add_query_arg:
                     url += '?foo=' + str(next(query_generator))
+                logger.debug(f'GET {url}...')
                 response = http_get_request_through_ip_address(url, edge_host['ip_address'])
                 response_headers = EdgeResponseHeaders(**response.headers)
                 logger.debug(response_headers)
@@ -413,7 +418,7 @@ class TestCDN:
                 resources_statuses[resource.id][edge_host['url']] = [host_response, ]
                 resources_statuses_template[resource.id][edge_host['url']] = None
 
-        period_of_time, periods_count, finish_once_success, time_to_test, start_time = (
+        period_of_time, finish_once_success, time_to_test, start_time = (
             cls.init_parameters_for_curl(period_of_time, periods_count, finish_once_success)
         )
 
@@ -421,12 +426,13 @@ class TestCDN:
         while time.time() < start_time + time_to_test:
             for resource in resources:
                 if resource.id in resources_statuses_template:
-                    for edge_host in cls.config.existing_resources.edge_cache_hosts:
+                    for edge_host in cls.edge_cache_hosts:
                         if edge_host in resources_statuses_template[resource.id]:
 
                             url = resource.cname
                             if add_query_arg:
                                 url += '?foo=' + str(next(query_generator))
+                            logger.debug(f'GET {url}...')
                             response = http_get_request_through_ip_address(url, edge_host['ip_address'])
                             response_headers = EdgeResponseHeaders(**response.headers)
 
@@ -436,7 +442,7 @@ class TestCDN:
                             host_response = HostResponse(time=time.time(), status=response_headers.cache_status)
                             resources_statuses[resource.id][response_headers.cache_host].append(host_response)
 
-                            if cls.resource_is_correctly_processed_by_edge(
+                            if cls.cache_is_revalidated_during_ttl(
                                 statuses=resources_statuses[resource.id][response_headers.cache_host],
                                 period_of_time=period_of_time
                             ):
@@ -455,27 +461,29 @@ class TestCDN:
         return False
 
     @classmethod
-    def resource_is_correctly_processed_by_edge(
+    def cache_is_revalidated_during_ttl(
             cls,
             statuses: List[HostResponse],
             period_of_time: int = None,
-            error_rate: float = 0.9
+            ttl_error_rate: float = None
     ) -> bool:
 
         if period_of_time is None:
             period_of_time = cls.short_ttl
+        if ttl_error_rate is None:
+            ttl_error_rate = cls.ttl_error_rate
 
         last_revalidated_or_miss = None
 
         for host_response in statuses:
             if host_response.status in ('REVALIDATED', 'MISS'):
                 if last_revalidated_or_miss:
-                    # TODO: Check no the time of response received but response prepared by host? (Header 'Date:...')
+                    # TODO: Check not the time of response received but response prepared by host? (Header 'Date:...')
                     # return host_response.time - last_revalidated_or_miss > error_rate * period_of_time
-                    if host_response.time - last_revalidated_or_miss > error_rate * period_of_time:
+                    if host_response.time - last_revalidated_or_miss > ttl_error_rate * period_of_time:
                         return True
                     else:
-                        raise RevalidatedTooEarly()
+                        raise RevalidatedBeforeTTL()
                 last_revalidated_or_miss = host_response.time
 
         return False
@@ -483,7 +491,7 @@ class TestCDN:
     @classmethod
     def get_not_pinged_edges(cls) -> List[str]:
         res = []
-        for edge_host_url in cls.config.existing_resources.edge_cache_hosts:
+        for edge_host_url in cls.edge_cache_hosts:
             if not ping(edge_host_url.url, attempts=2):
                 res.append(edge_host_url.url)
         return res
@@ -498,7 +506,6 @@ class TestCDN:
 
 
 
-
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     def test_origin_group_created(self):
         if self.initialize_type == ResourcesInitializeMethod.from_scratch:
@@ -509,15 +516,22 @@ class TestCDN:
         assert self.resources and all(r.id for r in self.resources), 'CDN resources not created'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('Active resource')
+    @allure.story('Active resource returns 200 or 403')
     @repeat_until_success_or_timeout()
     def test_active_resources(self):
         resources_to_test = self.prepare_resources_list_to_test(resource_is_active)
 
         for resource in resources_to_test:
-            request_code = http_get_url(f'{self.protocol}://{resource.cname}')
+            try:
+                request_code = http_get_url(f'{self.protocol}://{resource.cname}')
+            except requests.exceptions.ConnectionError as e:
+                raise AssertionError(e)
             assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('Active resource')
+    @allure.story('Inactive resource returns 404')
     @repeat_until_success_or_timeout()
     def test_not_active_resources(self):
         resources_to_test = self.prepare_resources_list_to_test(resource_is_not_active)
@@ -527,6 +541,7 @@ class TestCDN:
             assert request_code == 404, f'CDN resource {request_code}, should be 404'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('IP ACL')
     @repeat_until_success_or_timeout()
     def test_ip_address_acl(self):
         for resource in self.resources:
@@ -543,8 +558,10 @@ class TestCDN:
                 assert request_code != 403, f'CDN resource 403, should be not'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('Edge cache settings')
+    @allure.story('Enabled cache revalidates after ttl')
     @repeat_until_success_or_timeout()
-    def test_edge_cache_settings_enabled_revalidate_out_of_ttl(self):
+    def test_edge_cache_settings_enabled_revalidate_after_ttl(self):
 
         resources_to_test = self.prepare_resources_list_to_test(
             resource_is_active_and_no_acl_and_with_ttl(ttl=self.short_ttl)
@@ -552,17 +569,8 @@ class TestCDN:
         assert self.method_to_curl_resources(resources=resources_to_test), 'Not all statuses were processed correctly'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
-    @repeat_until_success_or_timeout()
-    def test_edge_cache_settings_enabled_revalidate_too_early_error(self):
-
-        resources_to_test = self.prepare_resources_list_to_test(
-            resource_is_active_and_no_acl_and_with_ttl(ttl=self.short_ttl)
-        )
-
-        with pytest.raises(RevalidatedTooEarly):
-            self.method_to_curl_resources(resources=resources_to_test, period_of_time=2*self.short_ttl)
-
-    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('Edge cache settings')
+    @allure.story('Enabled cache does not revalidates during ttl')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_enabled_do_not_revalidate_within_ttl(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -581,6 +589,8 @@ class TestCDN:
         ), 'Not all statuses were processed correctly'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('Edge cache settings')
+    @allure.story('Disabled cache does not add Cache-Status header')
     @repeat_until_success_or_timeout()
     def test_edge_cache_settings_disabled(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -601,6 +611,8 @@ class TestCDN:
             assert not response_headers.cache_status
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('Query')
+    @allure.story('Ignore query params')
     @repeat_until_success_or_timeout()
     def test_ignore_query_string(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -619,6 +631,8 @@ class TestCDN:
         assert self.method_to_curl_resources(resources_to_test, add_query_arg=True)
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('Query')
+    @allure.story('Do not ignore query params')
     @repeat_until_success_or_timeout()
     def test_do_not_ignore_query_string(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -633,10 +647,12 @@ class TestCDN:
 
         resources_to_test = self.prepare_resources_list_to_test(filter_to_test)
 
-        with pytest.raises(RevalidatedTooEarly):
+        with pytest.raises(RevalidatedBeforeTTL):
             self.method_to_curl_resources(resources_to_test, add_query_arg=True)
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('Client header')
+    @allure.story('Client custom header is set')
     @repeat_until_success_or_timeout()
     def test_static_header_is_set(self):
         def filter_to_test(r: CDNResource) -> bool:
@@ -662,7 +678,7 @@ class TestCDN:
             logger.debug(f'response headers: {response_headers}')
 
             assert param_value == self.custom_header, (f'expected header [param-to-test] '
-                                                 f'with value [{self.custom_header}], got {param_value}')
+                                                       f'with value [{self.custom_header}], got {param_value}')
 
 
 

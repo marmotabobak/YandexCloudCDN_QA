@@ -23,38 +23,27 @@ api_test_parameters:
 resources:
   folder_id: "b1gjifkk80hojm6nv42n"
   origin:
-    origin_group_id: "5867945351699784427"
     domain: "marmota-bobak.ru"
   cdn_resources:
     -
-      id: "cdnroq3y4e74osnivr7e"
       cname: "yccdn-qa-1.marmota-bobak.ru"
     -
-      id: "cdnrcblizmcdlwnddrko"
       cname: "yccdn-qa-2.marmota-bobak.ru"
     -
-      id: "cdnrqvhjv4tyhbfwimw3"
       cname: "yccdn-qa-3.marmota-bobak.ru"
     -
-      id: "cdnr5t2qvpsnaaglie2c"
       cname: "yccdn-qa-4.marmota-bobak.ru"
     -
-      id: "cdnrpnabfdp7u6drjaua"
       cname: "yccdn-qa-5.marmota-bobak.ru"
     -
-      id: "cdnr7bbwrxhguo63wkpl"
       cname: "yccdn-qa-6.marmota-bobak.ru"
     -
-      id: "cdnrrausbqmlmhzq6ffp"
       cname: "yccdn-qa-7.marmota-bobak.ru"
     -
-      id: "cdnrfvuvfped42dkmyrv"
       cname: "yccdn-qa-8.marmota-bobak.ru"
     -
-      id: "cdnrcqdphowdoxyxrufs"
       cname: "yccdn-qa-9.marmota-bobak.ru"
     -
-      id: "cdnrxcdi4xlyuwp42xfl"
       cname: "yccdn-qa-10.marmota-bobak.ru"
 
   edge_cache_hosts:

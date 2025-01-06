@@ -4,3 +4,4 @@ Requests==2.32.3
 setuptools==75.3.0
 urllib3==2.2.3
 PyYAML~=6.0.2
+allure-python-commons~=2.13.5

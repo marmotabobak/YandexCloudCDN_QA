@@ -11,10 +11,11 @@ logging.info('Starting service')
 
 
 def main():
-    OAUTH = os.environ['OAUTH']
-    authorization = Authorization(oauth=OAUTH, iam_token_url=IAM_TOKEN_URL)
-    token = authorization.get_token()
-    print(token)
+    ...
+    # OAUTH = os.environ['OAUTH']
+    # authorization = Authorization(oauth=OAUTH, iam_token_url=IAM_TOKEN_URL)
+    # token = authorization.get_token()
+    # print(token)
 
     # resources_processor = ResourcesAPIProcessor(
     #     entity_name=EntityName.CDN_RESOURCE,
@@ -50,5 +51,17 @@ def main():
 if __name__ == '__main__':
     # main()
     ...
+    import requests
+    try:
+        assert requests.get('http://yccdn-qa-1.marmota-bobak.ru'), 'dsd'
+    except AssertionError as e:
+        print('!!!!!!!')
+        print(e)
+    except requests.exceptions.ConnectionError as e:
+        print('>>>>>')
+        print(e)
+
+
+
 
 
