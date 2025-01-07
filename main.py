@@ -9,6 +9,8 @@ from app.authorization import Authorization
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
 logging.info('Starting service')
 
+from test.utils import get_connection_error_type
+
 
 def main():
     ...
@@ -51,11 +53,18 @@ def main():
 if __name__ == '__main__':
     # main()
     ...
+    OAUTH = os.environ['OAUTH']
+    authorization = Authorization(oauth=OAUTH, iam_token_url='https://iam.api.cloud.yandex.net/iam/v1/tokens')
+    token = authorization.get_token()
+    # print(token)
     import requests
+    import socket
+    import urllib3
+
     try:
-        request = requests.get(url='http://edge-qa-1.marmotabobak.ru')
-    except Exception as e:
-        print(e)
-    print(1)
+        requests.get('http://edge-qa-1.marmotabobak.ru/')
+    except requests.exceptions.ConnectionError as e:
+        print(get_connection_error_type(e.__context__))
+
 
 

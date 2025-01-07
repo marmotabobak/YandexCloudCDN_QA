@@ -18,16 +18,18 @@ class APIProcessor(BaseModel):
     query_args: Optional[Dict[str, str]] = None
 
     def get_items_ids_list(self) -> Optional[List[str]]:
+
         url = f'{self.api_url}/{self.api_entity.value}?folderId={self.folder_id}'
         headers = {'Authorization': f'Bearer {self.token}'}
-        request = requests.get(url=url, headers=headers)
+        response = requests.get(url=url, headers=headers)
+        logging.debug(f'Request: url [{url}], headers[{response.request.headers}]')
 
-        if request.status_code != 200:
-            logging.error(f'status [{request.status_code}], response text [{request.text}]')
+        if response.status_code != 200:
+            logging.error(f'status [{response.status_code}], response text [{response.text}]')
             return None
 
         try:
-            response_dict = request.json()
+            response_dict = response.json()
             if 'code' in response_dict:
                 error_code, error_message = response_dict.get('code'), response_dict.get('message')
                 logging.error('internal error')
@@ -35,10 +37,10 @@ class APIProcessor(BaseModel):
                 return None
 
             if resources := response_dict.get(self.api_entity.value, None):
-                logging.debug(f'response text: {request.text}')
+                logging.debug(f'response text: {response.text}')
                 return [resource['id'] for resource in resources]
             else:
-                logging.debug(f'no responses list found, response text: [{request.text}]')
+                logging.debug(f'no responses list found, response text: [{response.text}]')
                 return None
 
         except json.JSONDecodeError as e:
@@ -47,6 +49,8 @@ class APIProcessor(BaseModel):
         # except KeyError as e:
         #     logging.debug(f'JSONDecodeError, details: {e}')
         #     return None
+        finally:
+            logging.debug(f'response text: {response.text}')
 
     def get_item_by_id(self, item_id: str) -> Optional[CDNResource]:
 
@@ -77,8 +81,9 @@ class APIProcessor(BaseModel):
     @repeat_and_sleep(times_to_repeat=5, sleep_duration=1)
     def delete_item_by_id(self, item_id: str) -> Optional[bool]:
 
+        logging.info(f'Deleting [{item_id}] {self.api_entity.value}...')
         if not item_id:
-            logging.error('item_id is absent')
+            logging.error('...item_id is absent')
             return None
 
         url = f'{self.api_url}/{self.api_entity.value}/{item_id}'
@@ -86,11 +91,11 @@ class APIProcessor(BaseModel):
 
         headers = {'Authorization': f'Bearer {self.token}'}
         response = requests.delete(url=url, headers=headers)
+        logging.debug(f'Request URL and headers: {response.request.url}, {response.request.headers}')
+        logging.debug(f'Response text: {response.text}')
 
         if response.status_code != 200:
-            logging.error(f'status [{response.status_code}]')
-            logging.debug(f'request url and header: {response.request.url}, {response.request.headers}')
-            logging.debug(f'response text: {response.text}')
+            logging.error(f'Status [{response.status_code}]')
             return None
 
         try:
@@ -111,13 +116,18 @@ class APIProcessor(BaseModel):
             logging.debug(f'JSONDecodeError, details: {e}')
             return None
         finally:
-            logging.debug(f'request payload: {response.request.body}')
             logging.debug(f'response text: {response.text}')
 
-        logging.info(f'item [{item_id}] deleted successfully')
+        logging.info(f'...OK')
         return True
 
     def delete_several_items_by_ids(self, items_ids_list: List[str]) -> bool:
+
+        logging.info(f'Deleting [{items_ids_list}] {self.api_entity.value}...')
+        if not items_ids_list:
+            logging.error('...list is absent')
+            return False
+
         for item_id in items_ids_list:
             if not self.delete_item_by_id(item_id=item_id):
                 return False
@@ -143,6 +153,8 @@ class APIProcessor(BaseModel):
 
     @repeat_and_sleep(times_to_repeat=5, sleep_duration=1)
     def create_item(self, item: Union[CDNResource, OriginGroup]) -> Optional[str]:  # payload not object as need to prepare payload at specific class before
+
+        logging.info(f'Creating {self.api_entity.value}...')
 
         if not (payload := self.make_dict_from_item(item)):
             logging.error('error while parsing item to payload')

@@ -4,6 +4,9 @@ from typing import Callable, Any
 
 import pytest
 import requests
+from enum import Enum
+from urllib3.exceptions import MaxRetryError, NameResolutionError, ProtocolError
+
 
 from app.model import CDNResource
 from test.logger import logger
@@ -84,3 +87,18 @@ def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15)
             pytest.fail('All attempts failed.')
         return wrapper
     return decorator
+
+class ConnectionErrorType(Enum):
+    NAME_RESOLUTION_ERROR = 'Name resolution error'
+    RESET_BY_PEER = 'Connection reset by peer'
+    UNKNOWN = 'Unknown connection error'
+
+def get_connection_error_type(err: BaseException) -> ConnectionErrorType:
+    if isinstance(err, MaxRetryError) and isinstance(err.reason, NameResolutionError):  # dns not resolved
+        return ConnectionErrorType.NAME_RESOLUTION_ERROR
+    if isinstance(err, ProtocolError) and isinstance(err.args, tuple):
+        if len(err.args) >= 2 and (err_details := err.args[1]) and isinstance(err_details, ConnectionResetError):
+            err_args = err_details.args
+            if isinstance(err_args, tuple) and len(err_args) and err_args[0] in (54, 10054):  # 54 Unix, 10054 Windows
+                return ConnectionErrorType.RESET_BY_PEER
+    return ConnectionErrorType.UNKNOWN

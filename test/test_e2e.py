@@ -21,7 +21,8 @@ from test.logger import logger
 from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, CheckType, EdgeResponseHeaders
 from test.utils import RevalidatedBeforeTTL, ResourceIsNotEqualToExisting, URLIsNot404, resource_is_active, \
     resource_is_not_active, resource_is_active_and_no_acl_and_cache_enabled, resource_is_active_and_no_acl_and_ttl, \
-    resource_is_active_and_no_acl_and_with_ttl, http_get_url, repeat_until_success_or_timeout
+    resource_is_active_and_no_acl_and_with_ttl, http_get_url, repeat_until_success_or_timeout, \
+    get_connection_error_type, ConnectionErrorType
 
 # TODO: !True ONLY FOR DEBUG! Use False for Production
 SKIP_CHECK_RESOURCES_ARE_DEFAULT = True
@@ -32,7 +33,7 @@ SKIP_TESTS = False
 
 OAUTH = os.environ['OAUTH']
 CONFIG_PATH = 'test/config.yaml'
-# CONFIG_PATH = 'test/edge.yaml'
+CONFIG_PATH = 'test/edge.yaml'
 
 class TestCDN:
 
@@ -99,13 +100,22 @@ class TestCDN:
         else:
             cls.method_to_curl_resources = cls.randomly_curl_resources
 
-        cls.resources_proc = ResourcesAPIProcessor(
+        cls.cdn_resources_proc = ResourcesAPIProcessor(
             entity_name=EntityName.CDN_RESOURCE,
             api_url=cls.api_url,
             api_entity=APIEntity.CDN_RESOURCE,
             folder_id=cls.folder_id,
             token=cls.token
         )
+
+        if cls.initialize_type == ResourcesInitializeMethod.from_scratch:
+            cls.origin_groups_proc = OriginGroupsAPIProcessor(
+                entity_name=EntityName.ORIGIN_GROUP,
+                api_url=cls.api_url,
+                api_entity=APIEntity.ORIGIN_GROUP,
+                folder_id=cls.folder_id,
+                token=cls.token
+            )
 
     @classmethod
     def init_iam_token(cls):
@@ -158,22 +168,31 @@ class TestCDN:
             else:
                 return True
 
-
     @classmethod
     def cname_is_404(cls, cname: str) -> None:
+
         try:
             request = requests.get(url=f'{cls.protocol}://{cname}')
             logger.debug(f'GET {cname}...')
             if request.status_code != 404:  # TODO: think about this check
                 logger.error(f'Status code {request.status_code})')
                 raise URLIsNot404()
-        except requests.exceptions.ConnectionError as e:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
-            pytest.fail(f'ConnectionError: {e}')
+            logger.debug('...OK - 404 code')
+        except requests.exceptions.ConnectionError as ce:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
+            err_type = get_connection_error_type(ce.__context__)
+            logger.debug(f'err: {ce}, error type: {err_type.value}')
+
+            if err_type == ConnectionErrorType.RESET_BY_PEER:
+                logger.debug('...OK')
+            elif err_type == ConnectionErrorType.NAME_RESOLUTION_ERROR:
+                pytest.fail(f'Check DNS or any other name resolution issues')
+            else:
+                pytest.fail(f'Unknown connection error')
 
     @classmethod
     def resource_is_equal_to_existing(cls, resource: CDNResource) -> None:
         logger.debug(f'Comparing resource [{resource.id}]...')
-        if not cls.resources_proc.compare_item_to_existing(resource):
+        if not cls.cdn_resources_proc.compare_item_to_existing(resource):
             raise ResourceIsNotEqualToExisting()
 
     @classmethod
@@ -186,6 +205,8 @@ class TestCDN:
         if cls.initialize_type == ResourcesInitializeMethod.use_existing:
             cls.initialize_resources_from_existing()
         else:  # from scratch
+            cls.cdn_resources_proc.delete_all_items()
+            cls.origin_groups_proc.delete_all_items()
             cls.make_new_resources()
 
     @classmethod
@@ -194,7 +215,7 @@ class TestCDN:
 
         cdn_resources = []
         for cdn_resource in cls.cdn_resources:
-            resource = cls.resources_proc.make_default_cdn_resource(
+            resource = cls.cdn_resources_proc.make_default_cdn_resource(
                 resource_id=cdn_resource.id,
                 folder_id=cls.folder_id,
                 cname=cdn_resource.cname,
@@ -232,7 +253,7 @@ class TestCDN:
 
         if not SKIP_UPDATE_RESOURCES:
             for resource in cls.cdn_resources:
-                cls.resources_proc.update(resource)
+                cls.cdn_resources_proc.update(resource)
 
         if not SKIP_CHECK_EQUAL_TO_EXISTING:
             if not cls.resources_are_equal_to_existing():
@@ -242,21 +263,13 @@ class TestCDN:
     def resources_are_equal_to_existing(cls) -> bool:
         for resource in cls.cdn_resources:
             logger.debug(f'Checking resource: {resource}')
-            if not cls.resources_proc.compare_item_to_existing(resource):
+            if not cls.cdn_resources_proc.compare_item_to_existing(resource):
                 logger.error(f'Resource [{resource.id}] with cname {resource.cname} is not same as existing')
                 return False
         return True
 
     @classmethod
     def make_new_resources(cls):
-
-        cls.origin_groups_proc = OriginGroupsAPIProcessor(
-            entity_name=EntityName.ORIGIN_GROUP,
-            api_url=cls.api_url,
-            api_entity=APIEntity.ORIGIN_GROUP,
-            folder_id=cls.folder_id,
-            token=cls.token
-        )
 
         cls.origin = Origin(source=cls.origin_domain, enabled=True)
         cls.origin_group = OriginGroup(origins=[cls.origin, ], name=cls.origin_group_name, folder_id=cls.folder_id)
@@ -268,14 +281,17 @@ class TestCDN:
 
         logger.info(f'Success: all resources have been 404 for {cls.initialize_duration_check} seconds.')
 
+        created_resources = []
         for cname in cnames:
-            resource = cls.resources_proc.make_default_cdn_resource(
+            resource = cls.cdn_resources_proc.make_default_cdn_resource(
                 folder_id=cls.folder_id,
                 cname=cname,
                 origin_group_id=cls.origin_group.id
             )
-            cls.resources_proc.create_item(resource)
-            cls.cdn_resources.append(resource)
+            cls.cdn_resources_proc.create_item(resource)
+            created_resources.append(resource)
+
+        cls.cdn_resources = created_resources
 
     @classmethod
     def teardown_class(cls):
@@ -283,9 +299,8 @@ class TestCDN:
 
         if cls.initialize_type == ResourcesInitializeMethod.from_scratch:
             logger.info('Deleting items...')
-            assert cls.resources_proc.delete_several_items_by_ids([resource.id for resource in cls.cdn_resources]), \
-                'Items have not been deleted'
-            assert cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id), 'Origin group has not been deleted'
+            cls.cdn_resources_proc.delete_several_items_by_ids([resource.id for resource in cls.cdn_resources])
+            cls.origin_groups_proc.delete_item_by_id(cls.origin_group.id)
         elif cls.initialize_type == ResourcesInitializeMethod.use_existing:
             logger.info('Resetting resources to default...')
             # TODO: RESET TO DEFAULT
