@@ -18,7 +18,7 @@ from app.utils import ping, http_get_request_through_ip_address, increment, make
 from test.logger import logger
 from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, CheckType, EdgeResponseHeaders
 from test.utils import RevalidatedBeforeTTL, ResourceIsNotEqualToExisting, URLIsNot404, \
-    get_connection_error_type, ConnectionErrorType, repeat_until_success_or_timeout, http_get_status_code
+    get_connection_error_type, ConnectionErrorType, repeat_until_success_or_timeout, http_get_status_code, repeat_for_period_ot_time_or_until_fail
 
 OAUTH = os.environ['OAUTH']
 
@@ -127,10 +127,7 @@ class UtilsForTestClass:
         cls.cdn_resources = cdn_resources
 
         if not SKIP_CHECK_RESOURCES_ARE_DEFAULT:
-            if not cls.check_cdn_resources_or_cnames_before_creation(
-                    check_type=CheckType.RESOURCE_EQUAL,
-                    entities_to_check=cls.cdn_resources
-            ):
+            if not cls.check_cdn_resources_are_equal_to_existing_for_period_of_time():
                 pytest.fail('Resources are not default')
 
         cls.cdn_resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
@@ -169,8 +166,8 @@ class UtilsForTestClass:
         cls.origin_groups_proc.create_item(item=cls.origin_group)
 
         cnames = [cnd_resource.cname for cnd_resource in cls.cdn_resources]
-        if not cls.check_cdn_resources_or_cnames_before_creation(check_type=CheckType.CNAME_404, entities_to_check=cnames):
-            pytest.fail('Setup failed: cnames are not reachable')
+        if not cls.check_cnames_are_404_or_reset_by_peer(cnames=cnames):
+            pytest.fail('Cnames are not reachable')
 
         logger.info(f'Success: all resources have been 404 for {cls.initialize_duration_check} seconds.')
 
@@ -217,43 +214,12 @@ class UtilsForTestClass:
                 pytest.fail(f'Edges are not pinged successfully: {ping_fail_edges}')
 
     @classmethod
-    def cname_is_not_available(cls, cname: str) -> None:
-        try:
-            request = requests.get(url=f'{cls.protocol}://{cname}')
-            logger.debug(f'GET {cname}...')
-            if request.status_code != 404:  # TODO: think about this check
-                logger.error(f'Status code {request.status_code})')
-                raise URLIsNot404()
-            logger.debug('...OK - 404')
-
-        except requests.exceptions.ConnectionError as ce:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
-            err_type = get_connection_error_type(ce.__context__)
-            logger.debug(f'err: {ce}, error type: {err_type.value}')
-
-            if err_type == ConnectionErrorType.RESET_BY_PEER:
-                logger.debug('...OK - reset by peer')
-            elif err_type == ConnectionErrorType.NAME_RESOLUTION_ERROR:
-                pytest.fail(f'Check DNS or any other name resolution issues')
-            else:
-                pytest.fail(f'Unknown connection error')
-
-    @classmethod
     def cdn_resource_is_equal_to_existing(cls, cdn_resource: CDNResource) -> None:
         logger.info(f'Comparing CDN resource [{cdn_resource.id}]...')
         logger.debug(f'CDN resource: {cdn_resource}')
         if not cls.cdn_resources_proc.compare_item_to_existing(cdn_resource):
             raise ResourceIsNotEqualToExisting()
         logger.info('...OK')
-
-    @classmethod
-    def all_cdn_resources_are_equal_to_existing(cls) -> bool:
-        for resource in cls.cdn_resources:
-            logger.debug(f'Checking resource: {resource}')
-            if not cls.cdn_resources_proc.compare_item_to_existing(resource):
-                logger.error(f'Resource [{resource.id}] with cname {resource.cname} is not same as existing')
-                return False
-        return True
-
 
     @classmethod
     def init_parameters_for_curl(
@@ -457,44 +423,47 @@ class UtilsForTestClass:
         return resources_to_test
 
     @classmethod
-    @repeat_until_success_or_timeout()
-    def check_cdn_resources_or_cnames_before_creation(
-        cls,
-        entities_to_check: Union[List[str], List[CDNResource]],
-        check_type: CheckType,
-        duration_to_success: int = None,
-        attempt_sleep: int = None
-    ) -> bool:
+    @repeat_until_success_or_timeout(attempts=2, attempt_delay=1)
+    @repeat_for_period_ot_time_or_until_fail(attempts=2, attempt_delay=1)
+    def check_cdn_resources_are_equal_to_existing_for_period_of_time(cls) -> bool:
+        return cls.all_cdn_resources_are_equal_to_existing()
 
-        if check_type == CheckType.CNAME_404:
-            method_to_check = cls.cname_is_not_available
-        elif check_type == CheckType.RESOURCE_EQUAL:
-            method_to_check = cls.cdn_resource_is_equal_to_existing
-        else:
-            logger.error('Unknown check_type')
-            return False
+    @classmethod
+    def all_cdn_resources_are_equal_to_existing(cls) -> bool:
+        logger.info('Checking all cdn resources are equal to existing...')
+        for resource in cls.cdn_resources:
+            logger.debug(f'Checking resource: {resource.id}...')
+            if not cls.cdn_resources_proc.compare_item_to_existing(resource):
+                logger.debug('...FAIL')
+                return False
+            logger.debug('...OK')
+        logger.info('...OK')
+        return True
 
-        if duration_to_success is None:
-            duration_to_success = cls.initialize_duration_check
-        if attempt_sleep is None:
-            attempt_sleep = cls.initialize_sleep_between_attempts
 
-        attempt = 1
-        now = datetime.now()
-        finish_time = now + timedelta(seconds=duration_to_success)
+    @classmethod
+    @repeat_until_success_or_timeout(attempts=2, attempt_delay=1)
+    @repeat_for_period_ot_time_or_until_fail(attempts=2, attempt_delay=1)
+    def check_cnames_are_404_or_reset_by_peer(cls, cnames: List[str]) -> bool:
+        logger.info(f'Checking if cnames are unavailable for period of time...')  # TODO: to add config parameter as period of time
+        for cname in cnames:
+            try:
+                request = requests.get(url=f'{cls.protocol}://{cname}')
+                logger.debug(f'GET {cname}...')
+                if request.status_code != 404:  # TODO: think about this check
+                    return False
 
-        logger.info(f'Checking if {check_type.value} for {duration_to_success} seconds...')
+            except requests.exceptions.ConnectionError as ce:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
+                err_type = get_connection_error_type(ce.__context__)
+                logger.debug(f'err: {ce}, error type: {err_type.value}')
 
-        while True:
-            logger.debug(f'Attempt #{attempt}')
-            for entity in entities_to_check:
-                method_to_check(entity)
-                logger.debug('...OK')
-            logger.debug(f'Intermediate success: all {check_type.value}')
-            if (now := datetime.now()) < finish_time:
-                seconds_left = (finish_time - now).seconds
-                logger.debug(f'{seconds_left} seconds left. Sleeping for {attempt_sleep} seconds...')
-                time.sleep(attempt_sleep)
-                attempt += 1
-            else:
-                return True
+                if err_type == ConnectionErrorType.RESET_BY_PEER:
+                    logger.debug('...OK - reset by peer')
+                elif err_type == ConnectionErrorType.NAME_RESOLUTION_ERROR:
+                    logger.error(f'...FAIL. Check DNS or any other name resolution issues')
+                    return False
+                else:
+                    logger.error(f'...FAIL. Unknown connection error')
+                    return False
+
+            return True
