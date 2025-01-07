@@ -67,10 +67,10 @@ def resource_is_active_and_no_acl_and_with_ttl(ttl: int) -> Callable:
 
 
 
-def http_get_url(url: str) -> int:
-    logger.debug(f'GET {url}...')
-    request = requests.get(url)
-    return request.status_code
+def http_get_status_code(url: str) -> int:
+    logger.info(f'GET {url}...')
+    response = requests.get(url)
+    return response.status_code
 
 def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15):
     def decorator(func: Callable):

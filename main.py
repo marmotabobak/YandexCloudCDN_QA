@@ -53,18 +53,38 @@ def main():
 if __name__ == '__main__':
     # main()
     ...
-    OAUTH = os.environ['OAUTH']
-    authorization = Authorization(oauth=OAUTH, iam_token_url='https://iam.api.cloud.yandex.net/iam/v1/tokens')
-    token = authorization.get_token()
-    # print(token)
-    import requests
-    import socket
-    import urllib3
+    # OAUTH = os.environ['OAUTH']
+    # authorization = Authorization(oauth=OAUTH, iam_token_url='https://iam.api.cloud.yandex.net/iam/v1/tokens')
+    # token = authorization.get_token()
+    # # print(token)
+    # import requests
+    # import socket
+    # import urllib3
+    #
+    # try:
+    #     requests.get('http://edge-qa-1.marmotabobak.ru/')
+    # except requests.exceptions.ConnectionError as e:
+    #     print(get_connection_error_type(e.__context__))
 
-    try:
-        requests.get('http://edge-qa-1.marmotabobak.ru/')
-    except requests.exceptions.ConnectionError as e:
-        print(get_connection_error_type(e.__context__))
+    class Foo:
+        def __init__(self, fizz, buzz):
+            self.fizz = fizz
+            self.buzz = buzz
+
+    obj = Foo({1: 2}, False)
+
+    def filter_to_test(f: Foo) -> bool:
+        return all(
+            (
+                f.fizz,
+                f.buzz,
+                lambda: f.buzz[1343] if f.buzz else False
+            )
+        )
+
+    print(filter_to_test(obj))
+
+
 
 
 

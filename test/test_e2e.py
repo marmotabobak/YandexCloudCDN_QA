@@ -21,8 +21,8 @@ from test.logger import logger
 from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, CheckType, EdgeResponseHeaders
 from test.utils import RevalidatedBeforeTTL, ResourceIsNotEqualToExisting, URLIsNot404, resource_is_active, \
     resource_is_not_active, resource_is_active_and_no_acl_and_cache_enabled, resource_is_active_and_no_acl_and_ttl, \
-    resource_is_active_and_no_acl_and_with_ttl, http_get_url, repeat_until_success_or_timeout, \
-    get_connection_error_type, ConnectionErrorType
+    resource_is_active_and_no_acl_and_with_ttl, http_get_status_code, repeat_until_success_or_timeout, \
+    get_connection_error_type, ConnectionErrorType, resource_is_active_and_no_acl
 
 # TODO: !True ONLY FOR DEBUG! Use False for Production
 SKIP_CHECK_RESOURCES_ARE_DEFAULT = True
@@ -33,7 +33,7 @@ SKIP_TESTS = False
 
 OAUTH = os.environ['OAUTH']
 CONFIG_PATH = 'test/config.yaml'
-CONFIG_PATH = 'test/edge.yaml'
+# CONFIG_PATH = 'test/edge.yaml'
 
 class TestCDN:
 
@@ -170,7 +170,6 @@ class TestCDN:
 
     @classmethod
     def cname_is_404(cls, cname: str) -> None:
-
         try:
             request = requests.get(url=f'{cls.protocol}://{cname}')
             logger.debug(f'GET {cname}...')
@@ -178,6 +177,7 @@ class TestCDN:
                 logger.error(f'Status code {request.status_code})')
                 raise URLIsNot404()
             logger.debug('...OK - 404 code')
+
         except requests.exceptions.ConnectionError as ce:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
             err_type = get_connection_error_type(ce.__context__)
             logger.debug(f'err: {ce}, error type: {err_type.value}')
@@ -545,7 +545,7 @@ class TestCDN:
 
         for resource in resources_to_test:
             try:
-                request_code = http_get_url(f'{self.protocol}://{resource.cname}')
+                request_code = http_get_status_code(f'{self.protocol}://{resource.cname}')
             except requests.exceptions.ConnectionError as e:
                 raise AssertionError(e)
             assert request_code in (200, 403), f'CDN resource {request_code}, should be 200 or 403'
@@ -558,25 +558,34 @@ class TestCDN:
         resources_to_test = self.prepare_resources_list_to_test(resource_is_not_active)
 
         for resource in resources_to_test:
-            request_code = http_get_url(f'{self.protocol}://{resource.cname}')
-            assert request_code == 404, f'CDN resource {request_code}, should be 404'
+            response_code = http_get_status_code(f'{self.protocol}://{resource.cname}')
+            assert response_code == 404, f'CDN resource {response_code}, should be 404'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @allure.feature('IP ACL')
+    @allure.story('Resource is NOT available with ACL on')
     @repeat_until_success_or_timeout()
-    def test_ip_address_acl(self):
-        for resource in self.cdn_resources:
-            url = f'{self.protocol}://{resource.cname}'
-            logger.info(f'GET {url}...')
-            request = requests.get(url)
-            request_code = request.status_code
-            if resource.options.ip_address_acl and resource.options.ip_address_acl.enabled:
-                if resource.options.ip_address_acl.policy_type == 'POLICY_TYPE_ALLOW':  # consider ip-address is NOT our else refactor
-                    assert request_code == 403, f'CDN resource {request_code}, should be 403'
-                else:
-                    ...  #TODO: to add
-            else:  # allowed
-                assert request_code != 403, f'CDN resource 403, should be not'
+    def test_ip_address_acl_on(self):
+        def filter_to_test(r: CDNResource) -> bool:
+            if r.active and r.options and r.options.ip_address_acl and r.options.ip_address_acl:
+                if r.options.ip_address_acl.policy_type == 'POLICY_TYPE_ALLOW':
+                    return True
+            return False
+
+        resources_to_test = self.prepare_resources_list_to_test(filter_to_test)
+        for resource in resources_to_test:
+            request_code = http_get_status_code(f'{self.protocol}://{resource.cname}')
+            assert request_code == 403, f'CDN resource {request_code}, should be 403'
+
+    @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
+    @allure.feature('IP ACL')
+    @allure.story('Resource is available without ACL')
+    @repeat_until_success_or_timeout()
+    def test_ip_address_acl_off(self):
+        resources_to_test = self.prepare_resources_list_to_test(resource_is_active_and_no_acl)
+        for resource in resources_to_test:
+            request_code = http_get_status_code(f'{self.protocol}://{resource.cname}')
+            assert request_code != 403, f'CDN resource {request_code}, should not be 403'
 
     @pytest.mark.skipif(SKIP_TESTS, reason='FOR DEBUG ONLY - ACTIVATE FOR PRODUCTION USE')
     @allure.feature('Edge cache settings')
