@@ -16,11 +16,6 @@ class RevalidatedBeforeTTL(Exception): ...
 
 class ResourceIsNotEqualToExisting(Exception): ...
 
-class URLIsNot404(Exception): ...
-
-
-
-
 
 def resource_is_active(resource: CDNResource) -> bool:
     return resource.active
@@ -64,9 +59,6 @@ def resource_is_active_and_no_acl_and_with_ttl(ttl: int) -> Callable:
     return func
 
 
-
-
-
 def http_get_status_code(url: str) -> int:
     logger.info(f'GET {url}...')
     response = requests.get(url)
@@ -89,19 +81,28 @@ def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15)
         return wrapper
     return decorator
 
-def repeat_for_period_ot_time_or_until_fail(attempts: int = 2, attempt_delay: int = 1):
+def repeat_for_period_ot_time_or_until_fail(
+        attempts_needed_to_succeed: int = 5,
+        success_attempt_delay: int = 1,
+        tries_if_fail: int = 2):
     def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> bool:
-            for i in range(attempts):
-                logger.debug(f'Attempt #{i + 1} of {attempts}...')
-                res = func(*args, **kwargs)
+            for _ in range(tries_if_fail):
+                res = None
+                for i in range(attempts_needed_to_succeed):
+                    logger.debug(f'Attempt #{i + 1} of {attempts_needed_to_succeed}...')
+                    res = func(*args, **kwargs)
+                    if not res:
+                        break
+                    logger.debug(f'...OK. Sleeping for {success_attempt_delay} seconds...')
+                    if i < attempts_needed_to_succeed - 1:
+                        time.sleep(success_attempt_delay)
                 if not res:
-                    return False
-                logger.debug(f'...OK. Sleeping for {attempt_delay} seconds...')
-                if i < attempts - 1:
-                    time.sleep(attempt_delay)
-            return True
+                    continue
+                else:
+                    return True
+            return False
         return wrapper
     return decorator
 

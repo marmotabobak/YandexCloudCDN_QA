@@ -1,5 +1,7 @@
 import logging
 import os
+import random
+
 import yaml
 
 
@@ -66,25 +68,54 @@ if __name__ == '__main__':
     # except requests.exceptions.ConnectionError as e:
     #     print(get_connection_error_type(e.__context__))
 
-    class Foo:
-        def __init__(self, fizz, buzz):
-            self.fizz = fizz
-            self.buzz = buzz
+from typing import Callable, Any
+from functools import wraps
+import time
+import random
 
-    obj = Foo({1: 2}, False)
+def repeat_until_success_or_timeout(attempts: int = 10, attempt_delay: int = 0):
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            for i in range(attempts):
+                logging.debug(f'Attempt #{i + 1} of {attempts}...')
+                if func(*args, **kwargs):
+                    return True
+                if i < attempts - 1:
+                    time.sleep(attempt_delay)
+            print('!!!ERRR')
+        return wrapper
+    return decorator
 
-    def filter_to_test(f: Foo) -> bool:
-        return all(
-            (
-                f.fizz,
-                f.buzz,
-                lambda: f.buzz[1343] if f.buzz else False
-            )
-        )
+def repeat_for_period_ot_time_or_until_fail(
+        attempts_needed_to_succeed: int = 3,
+        success_attempt_delay: int = 0,
+        tries_if_fail: int = 2):
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> bool:
+            for _ in range(tries_if_fail):
+                res = None
+                for i in range(attempts_needed_to_succeed):
+                    logging.debug(f'Attempt #{i + 1} of {attempts_needed_to_succeed}...')
+                    res = func(*args, **kwargs)
+                    if not res:
+                        break
+                    logging.debug(f'...OK. Sleeping for {success_attempt_delay} seconds...')
+                    if i < attempts_needed_to_succeed - 1:
+                        time.sleep(success_attempt_delay)
+                if not res:
+                    continue
+                else:
+                    return True
+            return False
+        return wrapper
+    return decorator
 
-    print(filter_to_test(obj))
+@repeat_for_period_ot_time_or_until_fail()
+def get_numb():
+    n = random.randint(0, 1)
+    print(n)
+    return n == 1
 
-
-
-
-
+print(get_numb())

@@ -1,8 +1,7 @@
 import os
 import time
 from copy import deepcopy
-from datetime import datetime, timedelta
-from typing import List, Union, Callable
+from typing import List, Callable
 
 import pytest
 import requests
@@ -16,9 +15,9 @@ from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
 from app.utils import ping, http_get_request_through_ip_address, increment, make_random_8_symbols
 from test.logger import logger
-from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, CheckType, EdgeResponseHeaders
-from test.utils import RevalidatedBeforeTTL, ResourceIsNotEqualToExisting, URLIsNot404, \
-    get_connection_error_type, ConnectionErrorType, repeat_until_success_or_timeout, http_get_status_code, repeat_for_period_ot_time_or_until_fail
+from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, EdgeResponseHeaders
+from test.utils import RevalidatedBeforeTTL, ResourceIsNotEqualToExisting, get_connection_error_type, \
+    ConnectionErrorType, repeat_until_success_or_timeout, http_get_status_code, repeat_for_period_ot_time_or_until_fail
 
 OAUTH = os.environ['OAUTH']
 
@@ -128,7 +127,7 @@ class UtilsForTestClass:
 
         if not SKIP_CHECK_RESOURCES_ARE_DEFAULT:
             if not cls.check_cdn_resources_are_equal_to_existing_for_period_of_time():
-                pytest.fail('Resources are not default')
+                pytest.fail('CDN resources are not default')
 
         cls.cdn_resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
 
@@ -156,7 +155,7 @@ class UtilsForTestClass:
 
         if not SKIP_CHECK_EQUAL_TO_EXISTING:
             if not cls.all_cdn_resources_are_equal_to_existing():
-                pytest.fail('Resources are not equal to existing')
+                pytest.fail('CDN resources are not equal to existing')
 
     @classmethod
     def init_new_resources(cls):
@@ -167,9 +166,7 @@ class UtilsForTestClass:
 
         cnames = [cnd_resource.cname for cnd_resource in cls.cdn_resources]
         if not cls.check_cnames_are_404_or_reset_by_peer(cnames=cnames):
-            pytest.fail('Cnames are not reachable')
-
-        logger.info(f'Success: all resources have been 404 for {cls.initialize_duration_check} seconds.')
+            pytest.fail('Error while checking cnames')
 
         created_resources = []
         for cname in cnames:
@@ -182,8 +179,6 @@ class UtilsForTestClass:
             created_resources.append(resource)
 
         cls.cdn_resources = created_resources
-
-
 
 
 
@@ -423,8 +418,7 @@ class UtilsForTestClass:
         return resources_to_test
 
     @classmethod
-    @repeat_until_success_or_timeout(attempts=2, attempt_delay=1)
-    @repeat_for_period_ot_time_or_until_fail(attempts=2, attempt_delay=1)
+    @repeat_for_period_ot_time_or_until_fail(attempts_needed_to_succeed=2, success_attempt_delay=5, tries_if_fail=2)
     def check_cdn_resources_are_equal_to_existing_for_period_of_time(cls) -> bool:
         return cls.all_cdn_resources_are_equal_to_existing()
 
@@ -440,12 +434,10 @@ class UtilsForTestClass:
         logger.info('...OK')
         return True
 
-
     @classmethod
-    @repeat_until_success_or_timeout(attempts=2, attempt_delay=1)
-    @repeat_for_period_ot_time_or_until_fail(attempts=2, attempt_delay=1)
+    @repeat_for_period_ot_time_or_until_fail(attempts_needed_to_succeed=1, success_attempt_delay=0, tries_if_fail=2)
     def check_cnames_are_404_or_reset_by_peer(cls, cnames: List[str]) -> bool:
-        logger.info(f'Checking if cnames are unavailable for period of time...')  # TODO: to add config parameter as period of time
+        logger.info(f'Checking if cnames are 404 or reset by peer...')  # TODO: to add config parameter as period of time
         for cname in cnames:
             try:
                 request = requests.get(url=f'{cls.protocol}://{cname}')
@@ -467,3 +459,4 @@ class UtilsForTestClass:
                     return False
 
             return True
+        logger.info('...OK')
