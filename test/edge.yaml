@@ -22,26 +22,27 @@ api_test_parameters:
 
 resources:
   folder_id: "b1ghqoihr671ogin2pq5"
+  origin_group_name: "edge-qa-origin"
   origin:
     domain: "marmotabobak.ru"
   cdn_resources:
     -
-      cname: "edge-qa-1.marmota-bobak.ru"
-    -
-      cname: "edge-qa-2.marmota-bobak.ru"
-    -
-      cname: "edge-qa-3.marmota-bobak.ru"
-    -
-      cname: "edge-qa-4.marmota-bobak.ru"
-    -
-      cname: "edge-qa-5.marmota-bobak.ru"
-    -
-      cname: "edge-qa-6.marmota-bobak.ru"
-    -
-      cname: "edge-qa-7.marmota-bobak.ru"
-    -
-      cname: "edge-qa-8.marmota-bobak.ru"
-    -
-      cname: "edge-qa-9.marmota-bobak.ru"
-    -
-      cname: "edge-qa-10.marmota-bobak.ru"
+      cname: "edge-qa-1.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-2.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-3.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-4.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-5.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-6.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-7.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-8.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-9.marmotabobak.ru"
+#    -
+#      cname: "edge-qa-10.marmotabobak.ru"

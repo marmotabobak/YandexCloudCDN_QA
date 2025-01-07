@@ -62,6 +62,7 @@ class EdgeCacheHost(BaseModel):
 
 class Resources(BaseModel):
     folder_id: str = Field(..., description='')
+    origin_group_name: Optional[str] = Field(None, description='')
     origin: Origin = Field(..., description='')
     cdn_resources: List[CDNResource] = Field(..., description='')
     edge_cache_hosts: Optional[List[EdgeCacheHost]] = Field(None, description='')

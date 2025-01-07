@@ -183,7 +183,7 @@ class Origin(BaseModelWithAliases):
     backup: Optional[bool] = Field(None)
     meta: Optional[OriginMeta] = Field(None)
 
-# TODO: make origins and oeigin groups comparable (__eq()__ and __ne()__)
+# TODO: make origins and origin groups comparable (__eq()__ and __ne()__)
 class OriginGroup(BaseModelWithAliases):
     use_next: Optional[bool] = Field(None, alias='useNext')
     origins: List[Origin]

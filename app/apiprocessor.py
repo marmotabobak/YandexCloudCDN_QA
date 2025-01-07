@@ -76,18 +76,25 @@ class APIProcessor(BaseModel):
 
     @repeat_and_sleep(times_to_repeat=5, sleep_duration=1)
     def delete_item_by_id(self, item_id: str) -> Optional[bool]:
+
+        if not item_id:
+            logging.error('item_id is absent')
+            return None
+
         url = f'{self.api_url}/{self.api_entity.value}/{item_id}'
         url += f'?{make_query_string_from_args(self.query_args)}' if self.query_args else ''
 
         headers = {'Authorization': f'Bearer {self.token}'}
-        request = requests.delete(url=url, headers=headers)
+        response = requests.delete(url=url, headers=headers)
 
-        if request.status_code != 200:
-            logging.error(f'status [{request.status_code}], response text [{request.text}]')
+        if response.status_code != 200:
+            logging.error(f'status [{response.status_code}]')
+            logging.debug(f'request url and header: {response.request.url}, {response.request.headers}')
+            logging.debug(f'response text: {response.text}')
             return None
 
         try:
-            response_dict = request.json()
+            response_dict = response.json()
             if 'code' in response_dict:
                 error_code, error_message = response_dict.get('code'), response_dict.get('message')
                 logging.error('internal error')
@@ -103,6 +110,9 @@ class APIProcessor(BaseModel):
         except json.JSONDecodeError as e:
             logging.debug(f'JSONDecodeError, details: {e}')
             return None
+        finally:
+            logging.debug(f'request payload: {response.request.body}')
+            logging.debug(f'response text: {response.text}')
 
         logging.info(f'item [{item_id}] deleted successfully')
         return True

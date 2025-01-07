@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from copy import deepcopy
@@ -87,6 +88,7 @@ class TestCDN:
         cls.origin = cls.config.resources.origin
         cls.edge_cache_hosts = cls.config.resources.edge_cache_hosts
         cls.ttl_error_rate = cls.config.api_test_parameters.ttl_settings.error_rate
+        cls.origin_group_name = cls.config.resources.origin_group_name
 
     @classmethod
     def init_attributes(cls):
@@ -141,12 +143,12 @@ class TestCDN:
         finish_time = now + timedelta(seconds=duration_to_success)
 
         logger.info(f'Checking {entity_text} for {duration_to_success} seconds...')
+
         while True:
             logger.debug(f'Attempt #{attempt}')
             for entity in entities_to_check:
                 method_to_check(entity)
                 logger.debug('...OK')
-
             logger.debug(f'Intermediate success: all {entity_text}')
             if (now := datetime.now()) < finish_time:
                 seconds_left = (finish_time - now).seconds
@@ -156,17 +158,17 @@ class TestCDN:
             else:
                 return True
 
+
     @classmethod
     def cname_is_404(cls, cname: str) -> None:
         try:
-            logger.debug(f'GET {cname}...')
             request = requests.get(url=f'{cls.protocol}://{cname}')
+            logger.debug(f'GET {cname}...')
             if request.status_code != 404:  # TODO: think about this check
                 logger.error(f'Status code {request.status_code})')
                 raise URLIsNot404()
         except requests.exceptions.ConnectionError as e:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
-            logger.error(e)
-            raise e
+            pytest.fail(f'ConnectionError: {e}')
 
     @classmethod
     def resource_is_equal_to_existing(cls, resource: CDNResource) -> None:
@@ -257,18 +259,19 @@ class TestCDN:
         )
 
         cls.origin = Origin(source=cls.origin_domain, enabled=True)
-        cls.origin_group = OriginGroup(origins=[cls.origin, ], name='test-origin', folder_id=cls.folder_id)
+        cls.origin_group = OriginGroup(origins=[cls.origin, ], name=cls.origin_group_name, folder_id=cls.folder_id)
         cls.origin_groups_proc.create_item(item=cls.origin_group)
 
-        if not cls.check_entities_for_period_of_time(check_type=CheckType.CNAME_404, entities_to_check=cls.cdn_cnames):
-            pytest.fail('Setup has failed')
+        cnames = [cnd_resource.cname for cnd_resource in cls.cdn_resources]
+        if not cls.check_entities_for_period_of_time(check_type=CheckType.CNAME_404, entities_to_check=cnames):
+            pytest.fail('Setup failed: cnames are not reachable')
 
         logger.info(f'Success: all resources have been 404 for {cls.initialize_duration_check} seconds.')
 
-        for cdn_resource in cls.cdn_resources:
+        for cname in cnames:
             resource = cls.resources_proc.make_default_cdn_resource(
                 folder_id=cls.folder_id,
-                cname=cdn_resource['cname'],
+                cname=cname,
                 origin_group_id=cls.origin_group.id
             )
             cls.resources_proc.create_item(resource)

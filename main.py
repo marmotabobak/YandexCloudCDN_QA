@@ -53,15 +53,9 @@ if __name__ == '__main__':
     ...
     import requests
     try:
-        assert requests.get('http://yccdn-qa-1.marmota-bobak.ru'), 'dsd'
-    except AssertionError as e:
-        print('!!!!!!!')
+        request = requests.get(url='http://edge-qa-1.marmotabobak.ru')
+    except Exception as e:
         print(e)
-    except requests.exceptions.ConnectionError as e:
-        print('>>>>>')
-        print(e)
-
-
-
+    print(1)
 
 

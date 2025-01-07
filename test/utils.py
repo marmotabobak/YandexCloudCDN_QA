@@ -78,7 +78,7 @@ def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15)
                 try:
                     res = func(*args, **kwargs)
                     return res
-                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedBeforeTTL) as e:
+                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedBeforeTTL, URLIsNot404) as e:
                     logger.debug(f'...failed. Error: [{e}]. Sleeping for {attempt_delay} seconds...')
                     time.sleep(attempt_delay)
             pytest.fail('All attempts failed.')
