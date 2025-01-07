@@ -49,7 +49,7 @@ class TestCDN(UtilsForTestClass):
             # TODO: DEBUG COMMENT - UNCOMMENT FOR PRODUCTION
             # assert cls.resources_are_equal_to_existing(), 'Resources were not reset'
 
-        logger.info('done')
+        logger.info('...OK')
 
     # fake test-case to separate setup_class log output from first test-case
     @classmethod

@@ -81,10 +81,23 @@ def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15)
                 try:
                     res = func(*args, **kwargs)
                     return res
-                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedBeforeTTL, URLIsNot404) as e:
+                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedBeforeTTL) as e:
                     logger.debug(f'...failed. Error: [{e}]. Sleeping for {attempt_delay} seconds...')
                     time.sleep(attempt_delay)
             pytest.fail('All attempts failed.')
+        return wrapper
+    return decorator
+
+def repeat_for_period_ot_time_or_until_fail(attempts: int = 5, attempt_delay: int = 5):
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> bool:
+            for i in range(attempts):
+                logger.debug(f'Attempt #{i + 1} of {attempts}...')
+                func(*args, **kwargs)
+                logger.debug(f'...OK. Sleeping for {attempt_delay} seconds...')
+                time.sleep(attempt_delay)
+            return True
         return wrapper
     return decorator
 

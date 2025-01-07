@@ -104,115 +104,15 @@ class UtilsForTestClass:
     def init_resources(cls) -> None:
         logger.info(f'Initializing and checking resources for {cls.initialize_duration_check} seconds...')
         if cls.initialize_type == ResourcesInitializeMethod.use_existing:
-            cls.initialize_resources_from_existing()
+            cls.init_resources_from_existing()
         else:  # from scratch
             cls.cdn_resources_proc.delete_all_items()
             cls.origin_groups_proc.delete_all_items()
-            cls.make_new_resources()
-        logger.info('...OK')
-
-
-
-
-
-    @classmethod
-    @repeat_until_success_or_timeout()
-    def check_entities_for_period_of_time(
-        cls,
-        entities_to_check: Union[List[str], List[CDNResource]],
-        check_type: CheckType,
-        duration_to_success: int = None,
-        attempt_sleep: int = None
-    ) -> bool:
-
-        if check_type == CheckType.CNAME_404:
-            entity_text = 'cnames are 404'
-            method_to_check = cls.cname_is_not_available
-        elif check_type == CheckType.RESOURCE_EQUAL:
-            entity_text = 'resources are equal to existing'
-            method_to_check = cls.resource_is_equal_to_existing
-        else:
-            logger.error('Unknown check_type')
-            return False
-
-        if duration_to_success is None:
-            duration_to_success = cls.initialize_duration_check
-        if attempt_sleep is None:
-            attempt_sleep = cls.initialize_sleep_between_attempts
-
-        attempt = 1
-        now = datetime.now()
-        finish_time = now + timedelta(seconds=duration_to_success)
-
-        logger.info(f'Checking {entity_text} for {duration_to_success} seconds...')
-
-        while True:
-            logger.debug(f'Attempt #{attempt}')
-            for entity in entities_to_check:
-                method_to_check(entity)
-                logger.debug('...OK')
-            logger.debug(f'Intermediate success: all {entity_text}')
-            if (now := datetime.now()) < finish_time:
-                seconds_left = (finish_time - now).seconds
-                logger.debug(f'{seconds_left} seconds left. Sleeping for {attempt_sleep} seconds...')
-                time.sleep(attempt_sleep)
-                attempt += 1
-            else:
-                return True
-
-    @classmethod
-    def check_origin_is_200(cls) -> None:
-        logger.info('Checking origins 200...')
-
-        request_status_code = http_get_status_code(url=f'{cls.protocol}://{cls.origin_domain}')
-        if request_status_code != 200:
-            pytest.fail('Origin is not available')
-
+            cls.init_new_resources()
         logger.info('...OK')
 
     @classmethod
-    def ping_edges(cls) -> None:
-
-        if not SKIP_PING_EDGED and cls.edge_cache_hosts:
-            ping_fail_edges = []
-
-            logger.info('Pinging edges...')
-            for edge_host_url in cls.edge_cache_hosts:
-                if not ping(edge_host_url.url, attempts=2):
-                    ping_fail_edges.append(edge_host_url.url)
-
-            if ping_fail_edges:
-                pytest.fail(f'Edges are not pinged successfully: {ping_fail_edges}')
-
-    @classmethod
-    def cname_is_not_available(cls, cname: str) -> None:
-        try:
-            request = requests.get(url=f'{cls.protocol}://{cname}')
-            logger.debug(f'GET {cname}...')
-            if request.status_code != 404:  # TODO: think about this check
-                logger.error(f'Status code {request.status_code})')
-                raise URLIsNot404()
-            logger.debug('...OK - 404 code')
-
-        except requests.exceptions.ConnectionError as ce:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
-            err_type = get_connection_error_type(ce.__context__)
-            logger.debug(f'err: {ce}, error type: {err_type.value}')
-
-            if err_type == ConnectionErrorType.RESET_BY_PEER:
-                logger.debug('...OK')
-            elif err_type == ConnectionErrorType.NAME_RESOLUTION_ERROR:
-                pytest.fail(f'Check DNS or any other name resolution issues')
-            else:
-                pytest.fail(f'Unknown connection error')
-
-    @classmethod
-    def resource_is_equal_to_existing(cls, resource: CDNResource) -> None:
-        logger.debug(f'Comparing resource [{resource.id}]...')
-        if not cls.cdn_resources_proc.compare_item_to_existing(resource):
-            raise ResourceIsNotEqualToExisting()
-
-    @classmethod
-    def initialize_resources_from_existing(cls):
+    def init_resources_from_existing(cls):
         #TODO: make resources from yaml and then compare them with what really in Cloud are
 
         cdn_resources = []
@@ -227,7 +127,7 @@ class UtilsForTestClass:
         cls.cdn_resources = cdn_resources
 
         if not SKIP_CHECK_RESOURCES_ARE_DEFAULT:
-            if not cls.check_entities_for_period_of_time(
+            if not cls.check_cdn_resources_or_cnames_before_creation(
                     check_type=CheckType.RESOURCE_EQUAL,
                     entities_to_check=cls.cdn_resources
             ):
@@ -258,27 +158,18 @@ class UtilsForTestClass:
                 cls.cdn_resources_proc.update(resource)
 
         if not SKIP_CHECK_EQUAL_TO_EXISTING:
-            if not cls.resources_are_equal_to_existing():
+            if not cls.all_cdn_resources_are_equal_to_existing():
                 pytest.fail('Resources are not equal to existing')
 
     @classmethod
-    def resources_are_equal_to_existing(cls) -> bool:
-        for resource in cls.cdn_resources:
-            logger.debug(f'Checking resource: {resource}')
-            if not cls.cdn_resources_proc.compare_item_to_existing(resource):
-                logger.error(f'Resource [{resource.id}] with cname {resource.cname} is not same as existing')
-                return False
-        return True
-
-    @classmethod
-    def make_new_resources(cls):
+    def init_new_resources(cls):
 
         cls.origin = Origin(source=cls.origin_domain, enabled=True)
         cls.origin_group = OriginGroup(origins=[cls.origin, ], name=cls.origin_group_name, folder_id=cls.folder_id)
         cls.origin_groups_proc.create_item(item=cls.origin_group)
 
         cnames = [cnd_resource.cname for cnd_resource in cls.cdn_resources]
-        if not cls.check_entities_for_period_of_time(check_type=CheckType.CNAME_404, entities_to_check=cnames):
+        if not cls.check_cdn_resources_or_cnames_before_creation(check_type=CheckType.CNAME_404, entities_to_check=cnames):
             pytest.fail('Setup failed: cnames are not reachable')
 
         logger.info(f'Success: all resources have been 404 for {cls.initialize_duration_check} seconds.')
@@ -294,6 +185,75 @@ class UtilsForTestClass:
             created_resources.append(resource)
 
         cls.cdn_resources = created_resources
+
+
+
+
+
+
+    @classmethod
+    def check_origin_is_200(cls) -> None:
+        logger.info('Checking origins 200...')
+
+        request_status_code = http_get_status_code(url=f'{cls.protocol}://{cls.origin_domain}')
+        if request_status_code != 200:
+            pytest.fail('Origin is not available')
+
+        logger.info('...OK')
+
+    @classmethod
+    def ping_edges(cls) -> None:
+
+        if not SKIP_PING_EDGED and cls.edge_cache_hosts:
+            ping_fail_edges = []
+
+            logger.info('Pinging edges...')
+            for edge_host_url in cls.edge_cache_hosts:
+                # TODO: make attempts a parametr at config
+                if not ping(edge_host_url.url, attempts=2):
+                    ping_fail_edges.append(edge_host_url.url)
+
+            if ping_fail_edges:
+                pytest.fail(f'Edges are not pinged successfully: {ping_fail_edges}')
+
+    @classmethod
+    def cname_is_not_available(cls, cname: str) -> None:
+        try:
+            request = requests.get(url=f'{cls.protocol}://{cname}')
+            logger.debug(f'GET {cname}...')
+            if request.status_code != 404:  # TODO: think about this check
+                logger.error(f'Status code {request.status_code})')
+                raise URLIsNot404()
+            logger.debug('...OK - 404')
+
+        except requests.exceptions.ConnectionError as ce:  # DNS CNAME records should be created before hence should be reachable TODO remake with DNS creation
+            err_type = get_connection_error_type(ce.__context__)
+            logger.debug(f'err: {ce}, error type: {err_type.value}')
+
+            if err_type == ConnectionErrorType.RESET_BY_PEER:
+                logger.debug('...OK - reset by peer')
+            elif err_type == ConnectionErrorType.NAME_RESOLUTION_ERROR:
+                pytest.fail(f'Check DNS or any other name resolution issues')
+            else:
+                pytest.fail(f'Unknown connection error')
+
+    @classmethod
+    def cdn_resource_is_equal_to_existing(cls, cdn_resource: CDNResource) -> None:
+        logger.info(f'Comparing CDN resource [{cdn_resource.id}]...')
+        logger.debug(f'CDN resource: {cdn_resource}')
+        if not cls.cdn_resources_proc.compare_item_to_existing(cdn_resource):
+            raise ResourceIsNotEqualToExisting()
+        logger.info('...OK')
+
+    @classmethod
+    def all_cdn_resources_are_equal_to_existing(cls) -> bool:
+        for resource in cls.cdn_resources:
+            logger.debug(f'Checking resource: {resource}')
+            if not cls.cdn_resources_proc.compare_item_to_existing(resource):
+                logger.error(f'Resource [{resource.id}] with cname {resource.cname} is not same as existing')
+                return False
+        return True
+
 
     @classmethod
     def init_parameters_for_curl(
@@ -495,3 +455,46 @@ class UtilsForTestClass:
         if not resources_to_test:
             pytest.fail(f'No resources found to test disabled edge_cache_settings')
         return resources_to_test
+
+    @classmethod
+    @repeat_until_success_or_timeout()
+    def check_cdn_resources_or_cnames_before_creation(
+        cls,
+        entities_to_check: Union[List[str], List[CDNResource]],
+        check_type: CheckType,
+        duration_to_success: int = None,
+        attempt_sleep: int = None
+    ) -> bool:
+
+        if check_type == CheckType.CNAME_404:
+            method_to_check = cls.cname_is_not_available
+        elif check_type == CheckType.RESOURCE_EQUAL:
+            method_to_check = cls.cdn_resource_is_equal_to_existing
+        else:
+            logger.error('Unknown check_type')
+            return False
+
+        if duration_to_success is None:
+            duration_to_success = cls.initialize_duration_check
+        if attempt_sleep is None:
+            attempt_sleep = cls.initialize_sleep_between_attempts
+
+        attempt = 1
+        now = datetime.now()
+        finish_time = now + timedelta(seconds=duration_to_success)
+
+        logger.info(f'Checking if {check_type.value} for {duration_to_success} seconds...')
+
+        while True:
+            logger.debug(f'Attempt #{attempt}')
+            for entity in entities_to_check:
+                method_to_check(entity)
+                logger.debug('...OK')
+            logger.debug(f'Intermediate success: all {check_type.value}')
+            if (now := datetime.now()) < finish_time:
+                seconds_left = (finish_time - now).seconds
+                logger.debug(f'{seconds_left} seconds left. Sleeping for {attempt_sleep} seconds...')
+                time.sleep(attempt_sleep)
+                attempt += 1
+            else:
+                return True

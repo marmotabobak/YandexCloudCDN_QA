@@ -82,5 +82,5 @@ class EdgeResponseHeaders(BaseModel):
 HostResponse = namedtuple('HostResponse', 'time, status')
 
 class CheckType(str, Enum):
-    CNAME_404 = 'CNAME404'
-    RESOURCE_EQUAL = 'RESOURCE_EQUAL'
+    CNAME_404 = 'cnames are 404'
+    RESOURCE_EQUAL = 'resources are equal to existing'
