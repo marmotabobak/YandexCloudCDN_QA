@@ -77,7 +77,9 @@ class UtilsForTestClass:
     @classmethod
     def init_iam_token(cls) -> None:
         authorization = Authorization(oauth=OAUTH, iam_token_url=cls.iam_token_url)
-        cls.token = authorization.get_token()
+        if not (token := authorization.get_token()):
+            pytest.fail('Error while getting token.')
+        cls.token = token
 
     @classmethod
     def init_resources_processors(cls):
