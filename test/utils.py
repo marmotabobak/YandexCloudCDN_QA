@@ -1,6 +1,6 @@
 import time
 from functools import wraps
-from typing import Callable, Any
+from typing import Callable, Any, Optional, Dict
 
 import pytest
 import requests
@@ -59,10 +59,37 @@ def resource_is_active_and_no_acl_and_with_ttl(ttl: int) -> Callable:
         )
     return func
 
+def http_get_request(
+    url: str,
+    verify: Optional[bool] = False,
+    allow_redirects: Optional[bool] = True,
+    cookies: Optional[Dict[str, str]] = None,
+    session: Optional[requests.Session] = None,
+    timeout: Optional[int] = 5
+) -> Optional[requests.Response]:
+
+    log_string = f'GET {url}'
+    log_string += f', cookies: [{cookies}]' if cookies else ''
+
+    logger.debug(log_string)
+
+    if not session:
+        session = requests
+    response = session.get(
+        url=url,
+        verify=verify,
+        allow_redirects=allow_redirects,
+        cookies=cookies,
+        timeout=timeout
+    )
+
+    logger.debug(f'response: code [{response.status_code}], headers: [{response.headers}]')
+
+    return response
 
 def http_get_status_code(url: str) -> int:
     logger.info(f'GET {url}...')
-    response = requests.get(url, timeout=5)
+    response = http_get_request(url)
     return response.status_code
 
 def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15):

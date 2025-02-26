@@ -10,7 +10,7 @@ from test.model import ResourcesInitializeMethod, EdgeResponseHeaders
 from test.utils import RevalidatedBeforeTTL, resource_is_active, \
     resource_is_not_active, resource_is_active_and_no_acl_and_cache_enabled, resource_is_active_and_no_acl_and_ttl, \
     resource_is_active_and_no_acl_and_with_ttl, http_get_status_code, repeat_until_success_or_timeout, \
-    resource_is_active_and_no_acl
+    resource_is_active_and_no_acl, http_get_request
 from test.utils_for_test_class import UtilsForTestClass
 
 # TODO: !True ONLY FOR DEBUG! Use False for Production
@@ -165,7 +165,7 @@ class TestCDN(UtilsForTestClass):
         logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
         for resource in resources_to_test:
             url = f'{self.protocol}://{resource.cname}'
-            response = requests.get(url, timeout=5)
+            response = http_get_request(url)
             response_headers = EdgeResponseHeaders(**response.headers)
             assert not response_headers.cache_status
 
@@ -229,7 +229,7 @@ class TestCDN(UtilsForTestClass):
 
         for resource in resources_to_test:
             url = f'{self.protocol}://{resource.cname}'
-            response = requests.get(url=url, timeout=5)
+            response = http_get_request(url=url, timeout=5)
             response_headers = EdgeResponseHeaders(**response.headers)
             param_value = response_headers.param_to_test
 

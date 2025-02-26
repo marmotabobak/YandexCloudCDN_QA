@@ -16,16 +16,13 @@ from app.origingroup import OriginGroupsAPIProcessor
 from app.resource import ResourcesAPIProcessor
 from app.utils import ping, http_get_request_through_ip_address, increment, make_random_8_symbols
 from test.logger import logger
-from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, EdgeResponseHeaders
+from test.model import Config, RequestsType, ResourcesInitializeMethod, HostResponse, EdgeResponseHeaders, Resources
 from test.utils import RevalidatedBeforeTTL, ResourceIsNotEqualToExisting, get_connection_error_type, \
-    ConnectionErrorType, repeat_until_success_or_timeout, http_get_status_code, repeat_for_period_ot_time_or_until_fail
+    ConnectionErrorType, repeat_until_success_or_timeout, http_get_status_code, repeat_for_period_ot_time_or_until_fail, http_get_request
 
 OAUTH = os.environ['OAUTH']
 
 # TODO: !True ONLY FOR DEBUG! Use False for Production
-SKIP_CHECK_RESOURCES_ARE_DEFAULT = True
-SKIP_CHECK_EQUAL_TO_EXISTING = False
-SKIP_UPDATE_RESOURCES = True
 SKIP_PING_EDGED = True
 
 
@@ -130,10 +127,6 @@ class UtilsForTestClass:
             cdn_resources.append(resource)
         cls.cdn_resources = cdn_resources
 
-        if not SKIP_CHECK_RESOURCES_ARE_DEFAULT:
-            if not cls.check_cdn_resources_are_equal_to_existing_for_period_of_time():
-                pytest.fail('CDN resources are not default')
-
         cls.cdn_resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
         cls.cdn_resources[1].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(cls.short_ttl))  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
         cls.cdn_resources[2].options.edge_cache_settings = EdgeCacheSettings(enabled=False, default_value=str(cls.short_ttl))  # 'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru'
@@ -147,11 +140,9 @@ class UtilsForTestClass:
             policy_type='POLICY_TYPE_ALLOW'
         )
 
-        if not SKIP_UPDATE_RESOURCES:
+        if cls.initialize_type in (ResourcesInitializeMethod.update_existing, ResourcesInitializeMethod.from_scratch):
             for resource in cls.cdn_resources:
                 cls.cdn_resources_proc.update(resource)
-
-        if not SKIP_CHECK_EQUAL_TO_EXISTING:
             if not cls.all_cdn_resources_are_equal_to_existing():
                 pytest.fail('CDN resources are not equal to existing')
 
@@ -263,8 +254,7 @@ class UtilsForTestClass:
                     url = f'{protocol}://{resource.cname}'
                     if add_query_arg:
                         url += '?foo=' + str(next(query_generator))
-                    logger.debug(f'GET {url}...')
-                    response = requests_session.get(url, timeout=5)
+                    response = http_get_request(url, timeout=5, session=requests_session)
                     response_headers = EdgeResponseHeaders(**response.headers)
                     logger.debug(response_headers)
                     if not response_headers.cache_status:
@@ -439,7 +429,7 @@ class UtilsForTestClass:
         logger.info(f'Checking if cnames are 404 or reset by peer...')  # TODO: to add config parameter as period of time
         for cname in cnames:
             try:
-                request = requests.get(url=f'{cls.protocol}://{cname}', timeout=5)
+                request = http_get_request(url=f'{cls.protocol}://{cname}')
                 logger.debug(f'GET {cname}...')
                 if request.status_code != 404:  # TODO: think about this check
                     return False
