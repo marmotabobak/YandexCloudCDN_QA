@@ -38,6 +38,7 @@ class ClientHeadersSettings(BaseModel):
 
 class ResourcesInitializeMethod(str, Enum):
     use_existing = 'use_existing'  # Use existing resources for tests
+    update_existing = 'update_existing'  # Use existing but update them first
     from_scratch = 'from_scratch'  # Clean existing and create new resources for tests
 
 class ApiTestParameters(BaseModel):

@@ -8,7 +8,7 @@ import requests
 import yaml
 
 from app.authorization import Authorization
-from app.model import EntityName, APIEntity, EdgeCacheSettings, QueryParamsOptions, EnabledBoolValueBool, \
+from app.model import ItemType, APIFolder, EdgeCacheSettings, QueryParamsOptions, EnabledBoolValueBool, \
     EnabledBoolValueDictStrStr
 from app.model import OriginGroup, Origin, IpAddressAcl, CDNResource
 from app.origingroup import OriginGroupsAPIProcessor
@@ -85,18 +85,18 @@ class UtilsForTestClass:
     def init_resources_processors(cls):
 
         cls.cdn_resources_proc = ResourcesAPIProcessor(
-            entity_name=EntityName.CDN_RESOURCE,
+            item_type=ItemType.CDN_RESOURCE,
             api_url=cls.api_url,
-            api_entity=APIEntity.CDN_RESOURCE,
+            api_endpoint=APIFolder.CDN_RESOURCE,
             folder_id=cls.folder_id,
-            token=cls.token
+            api_token=cls.token
         )
 
         if cls.initialize_type == ResourcesInitializeMethod.from_scratch:
             cls.origin_groups_proc = OriginGroupsAPIProcessor(
-                entity_name=EntityName.ORIGIN_GROUP,
+                entity_name=ItemType.ORIGIN_GROUP,
                 api_url=cls.api_url,
-                api_entity=APIEntity.ORIGIN_GROUP,
+                api_entity=APIFolder.ORIGIN_GROUP,
                 folder_id=cls.folder_id,
                 token=cls.token
             )
@@ -106,6 +106,8 @@ class UtilsForTestClass:
         logger.info(f'Initializing and checking resources for {cls.initialize_duration_check} seconds...')
         if cls.initialize_type == ResourcesInitializeMethod.use_existing:
             cls.init_resources_from_existing()
+        elif cls.initialize_type == ResourcesInitializeMethod.update_existing:
+            ...
         else:  # from scratch
             cls.cdn_resources_proc.delete_all_items()
             cls.origin_groups_proc.delete_all_items()
@@ -132,19 +134,12 @@ class UtilsForTestClass:
                 pytest.fail('CDN resources are not default')
 
         cls.cdn_resources[0].active = False  # 'cdnroq3y4e74osnivr7e': 'yccdn-qa-1.marmota-bobak.ru'
-
         cls.cdn_resources[1].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(cls.short_ttl))  # 'cdnrcblizmcdlwnddrko': 'yccdn-qa-2.marmota-bobak.ru'
-
         cls.cdn_resources[2].options.edge_cache_settings = EdgeCacheSettings(enabled=False, default_value=str(cls.short_ttl))  # 'cdnrqvhjv4tyhbfwimw3': 'yccdn-qa-3.marmota-bobak.ru'
-
         cls.cdn_resources[3].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=True))  # 'cdnr5t2qvpsnaaglie2c': 'yccdn-qa-4.marmota-bobak.ru'
-
         cls.cdn_resources[4].options.query_params_options = QueryParamsOptions(ignore_query_string=EnabledBoolValueBool(enabled=True, value=False))  # 'cdnrpnabfdp7u6drjaua': 'yccdn-qa-5.marmota-bobak.ru'
-
         cls.cdn_resources[5].options.edge_cache_settings = EdgeCacheSettings(enabled=True, default_value=str(cls.long_ttl))
-
         cls.cdn_resources[6].options.static_headers = EnabledBoolValueDictStrStr(enabled=True, value={'param-to-test': cls.custom_header})
-
         cls.cdn_resources[9].options.ip_address_acl = IpAddressAcl(    # 'cdnrxcdi4xlyuwp42xfl': 'yccdn-qa-10.marmota-bobak.ru'
             enabled=True,
             excepted_values=['0.0.0.0/32', ],
@@ -214,7 +209,7 @@ class UtilsForTestClass:
     def cdn_resource_is_equal_to_existing(cls, cdn_resource: CDNResource) -> None:
         logger.info(f'Comparing CDN resource [{cdn_resource.id}]...')
         logger.debug(f'CDN resource: {cdn_resource}')
-        if not cls.cdn_resources_proc.compare_item_to_existing(cdn_resource):
+        if not cls.cdn_resources_proc.compare_resource_to_existing(cdn_resource):
             raise ResourceIsNotEqualToExisting()
         logger.info('...OK')
 
@@ -429,7 +424,7 @@ class UtilsForTestClass:
         logger.info('Checking all cdn resources are equal to existing...')
         for resource in cls.cdn_resources:
             logger.debug(f'Checking resource: {resource.id}...')
-            if not cls.cdn_resources_proc.compare_item_to_existing(resource):
+            if not cls.cdn_resources_proc.compare_resource_to_existing(resource):
                 logger.debug('...FAIL')
                 return False
             logger.debug('...OK')

@@ -1,5 +1,5 @@
 import json
-from typing import Iterator
+from typing import Iterator, Union
 
 import requests
 from pydantic import ValidationError
@@ -10,6 +10,34 @@ from app.utils import make_random_8_symbols
 
 
 class ResourcesAPIProcessor(APIProcessor):
+
+    def get_resource_by_id(self, resource_id: str) -> Optional[CDNResource]:
+
+        if not resource_id:
+            logging.error(f'None or empty resource id: [{resource_id}]')
+            return None
+
+        url = f'{self.api_url}/{self.api_endpoint.value}/{resource_id}'
+
+        headers = {'Authorization': f'Bearer {self.api_token}'}
+
+        request = requests.get(url=url, headers=headers)
+        try:
+            return CDNResource.model_validate(request.json())
+        except json.JSONDecodeError as e:
+            logging.error(f'json decode error')
+            logging.debug(f'error details: {e}')
+            return None
+        except ValidationError as e:
+            logging.error(f'pydantic validation error')
+            logging.debug(f'error details: {e}')
+            return None
+        finally:
+            logging.debug(f'response text: {request.text}')
+
+    def compare_resource_to_existing(self, item: Union[CDNResource, OriginGroup]) -> bool:
+        existing_item = self.get_resource_by_id(item.id)
+        return item == existing_item
 
     def make_dict_from_item(self, item: CDNResource) -> Optional[dict]:
         if not (item_dict := super().make_dict_from_item(item)):
@@ -72,7 +100,7 @@ class ResourcesAPIProcessor(APIProcessor):
 
     def update(self, updated_resource: CDNResource) -> Optional[str]:
         url = f'{self.api_url}/resources/{updated_resource.id}'
-        headers = {'Authorization': f'Bearer {self.token}'}
+        headers = {'Authorization': f'Bearer {self.api_token}'}
 
         payload = updated_resource.model_dump(exclude={'created_at', 'updated_at'}, by_alias=True)
         request = requests.patch(url=url, headers=headers, json=payload)

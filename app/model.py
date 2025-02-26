@@ -8,11 +8,11 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field, ConfigDict
 
 
-class EntityName(Enum):
+class ItemType(Enum):
     CDN_RESOURCE = 'resource'
     ORIGIN_GROUP = 'originGroup'
 
-class APIEntity(Enum):
+class APIFolder(Enum):
     CDN_RESOURCE = 'resources'
     ORIGIN_GROUP = 'originGroups'
 
