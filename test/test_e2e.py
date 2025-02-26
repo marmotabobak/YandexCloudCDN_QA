@@ -165,7 +165,7 @@ class TestCDN(UtilsForTestClass):
         logger.info(f'GET resources [{[r.cname for r in resources_to_test]}]...')
         for resource in resources_to_test:
             url = f'{self.protocol}://{resource.cname}'
-            response = requests.get(url)
+            response = requests.get(url, timeout=5)
             response_headers = EdgeResponseHeaders(**response.headers)
             assert not response_headers.cache_status
 
@@ -229,7 +229,7 @@ class TestCDN(UtilsForTestClass):
 
         for resource in resources_to_test:
             url = f'{self.protocol}://{resource.cname}'
-            response = requests.get(url=url)
+            response = requests.get(url=url, timeout=5)
             response_headers = EdgeResponseHeaders(**response.headers)
             param_value = response_headers.param_to_test
 

@@ -7,6 +7,7 @@ import pytest
 import requests
 import yaml
 
+
 from app.authorization import Authorization
 from app.model import ItemType, APIFolder, EdgeCacheSettings, QueryParamsOptions, EnabledBoolValueBool, \
     EnabledBoolValueDictStrStr
@@ -255,31 +256,32 @@ class UtilsForTestClass:
             period_of_time, periods_count, finish_once_success
         )
 
-        logger.info(f'GET resources [{[r.cname for r in resources]}] for {time_to_test} seconds...')
-        while time.time() < start_time + time_to_test:
-            for resource in resources:
-                url = f'{protocol}://{resource.cname}'
-                if add_query_arg:
-                    url += '?foo=' + str(next(query_generator))
-                logger.debug(f'GET {url}...')
-                response = requests.get(url)
-                response_headers = EdgeResponseHeaders(**response.headers)
-                logger.debug(response_headers)
-                if not response_headers.cache_status:
+        with requests.session() as requests_session:
+            logger.info(f'GET resources [{[r.cname for r in resources]}] for {time_to_test} seconds...')
+            while time.time() < start_time + time_to_test:
+                for resource in resources:
+                    url = f'{protocol}://{resource.cname}'
+                    if add_query_arg:
+                        url += '?foo=' + str(next(query_generator))
+                    logger.debug(f'GET {url}...')
+                    response = requests_session.get(url, timeout=5)
+                    response_headers = EdgeResponseHeaders(**response.headers)
                     logger.debug(response_headers)
-                    pytest.fail('Cache-Status header is absent')
-                host_response = HostResponse(time=time.time(), status=response_headers.cache_status)
-                resources_statuses.setdefault(
-                    resource.id,
-                    {response_headers.cache_host: []}
-                ).setdefault(response_headers.cache_host, []).append(host_response)
+                    if not response_headers.cache_status:
+                        logger.debug(response_headers)
+                        pytest.fail('Cache-Status header is absent')
+                    host_response = HostResponse(time=time.time(), status=response_headers.cache_status)
+                    resources_statuses.setdefault(
+                        resource.id,
+                        {response_headers.cache_host: []}
+                    ).setdefault(response_headers.cache_host, []).append(host_response)
 
-                if finish_once_success:
-                    if cls.cache_is_revalidated_during_ttl(
-                            statuses=resources_statuses[resource.id][response_headers.cache_host],
-                            period_of_time=period_of_time
-                    ):
-                        return True
+                    if finish_once_success:
+                        if cls.cache_is_revalidated_during_ttl(
+                                statuses=resources_statuses[resource.id][response_headers.cache_host],
+                                period_of_time=period_of_time
+                        ):
+                            return True
 
         logger.debug(f'resources statuses: {resources_statuses}')
 
@@ -437,7 +439,7 @@ class UtilsForTestClass:
         logger.info(f'Checking if cnames are 404 or reset by peer...')  # TODO: to add config parameter as period of time
         for cname in cnames:
             try:
-                request = requests.get(url=f'{cls.protocol}://{cname}')
+                request = requests.get(url=f'{cls.protocol}://{cname}', timeout=5)
                 logger.debug(f'GET {cname}...')
                 if request.status_code != 404:  # TODO: think about this check
                     return False

@@ -4,6 +4,7 @@ from typing import Callable, Any
 
 import pytest
 import requests
+from requests.exceptions import ReadTimeout
 from enum import Enum
 from urllib3.exceptions import MaxRetryError, NameResolutionError, ProtocolError
 
@@ -61,7 +62,7 @@ def resource_is_active_and_no_acl_and_with_ttl(ttl: int) -> Callable:
 
 def http_get_status_code(url: str) -> int:
     logger.info(f'GET {url}...')
-    response = requests.get(url)
+    response = requests.get(url, timeout=5)
     return response.status_code
 
 def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15):
@@ -73,7 +74,7 @@ def repeat_until_success_or_timeout(attempts: int = 20, attempt_delay: int = 15)
                 try:
                     res = func(*args, **kwargs)
                     return res
-                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedBeforeTTL) as e:
+                except (AssertionError, ResourceIsNotEqualToExisting, RevalidatedBeforeTTL, ReadTimeout) as e:
                     logger.debug(f'...failed. Error: [{e}]. Sleeping for {attempt_delay} seconds...')
                     if i < attempts - 1:
                         time.sleep(attempt_delay)
